@@ -107,6 +107,9 @@ struct MarkdownEditor: NSViewRepresentable {
         let highlighter = MarkdownHighlighter()
         private var isLoading = false
         private var restylePending = false
+        /// A freshly opened sheet shows every mark hidden; the caret placed at the top by
+        /// opening it isn't you editing the title.
+        private var skipNextReveal = false
         private let slash = SlashMenuState()
         private var slashAnchor: Int?
         private var slashHost: NSView?
@@ -157,12 +160,20 @@ struct MarkdownEditor: NSViewRepresentable {
             closeSlash()
             hideBubble()
             textView.imageFolder = model.loadedURL?.deletingLastPathComponent()
-            highlighter.revealRange = NSRange(location: 0, length: 0)
+            highlighter.revealRange = nil
             textView.string = text
             textView.layoutImagePreviews()
             isLoading = false
             textView.undoManager?.removeAllActions()
-            textView.setSelectedRange(NSRange(location: 0, length: 0))
+            // Start at the visible title: with marks hidden, a caret before "# " would put
+            // your first keystrokes in front of the heading mark.
+            var start = 0
+            if highlighter.hideMarkup, let mark = text.range(of: #"^#{1,6} +"#, options: .regularExpression) {
+                start = text.utf16.distance(from: text.startIndex, to: mark.upperBound)
+            }
+            skipNextReveal = true
+            textView.setSelectedRange(NSRange(location: start, length: 0))
+            skipNextReveal = false
             textView.scrollToBeginningOfDocument(nil)
             updateDecorations()
             repaintAll(textView)
@@ -327,7 +338,7 @@ struct MarkdownEditor: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !isLoading else { return }
             updateCaretFraction()
-            updateReveal()
+            if !skipNextReveal { updateReveal() }
             updateFormatState()
             if config?.focus != .off { updateDecorations() }
             centerCaret(animated: true)

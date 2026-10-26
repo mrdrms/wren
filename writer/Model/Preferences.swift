@@ -108,7 +108,7 @@ final class Preferences {
             "rhythm": false,
             "zenFullScreen": true,
             "liveFormatting": true,
-            "hideMarkup": false,
+            "hideMarkup": true,
             "showFormatBar": true,
             "minimalWhileTyping": true,
             "aiEnabled": false,
