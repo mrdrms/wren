@@ -65,7 +65,8 @@ struct AIClient {
     func complete(system: String, prompt: String, image: (data: Data, mime: String)? = nil) async throws -> String {
         if provider.needsKey && (key ?? "").isEmpty { throw AIError.missingKey(provider) }
         let request = try makeRequest(system: system, prompt: prompt, image: image)
-        let (data, response) = try await Self.session.data(for: request)
+        // Ollama is local; everything else carries a key and must not follow redirects elsewhere.
+        let (data, response) = try await (provider == .ollama ? Self.session : Safety.credentialSession).data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIError.server("No response from \(provider.label).") }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard (200..<300).contains(http.statusCode) else { throw AIError.server(errorMessage(json, status: http.statusCode)) }

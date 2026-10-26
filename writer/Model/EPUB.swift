@@ -151,7 +151,7 @@ enum EPUBBuilder {
         let result = NSMutableString(string: body)
         for match in regex.matches(in: body, range: NSRange(location: 0, length: result.length)).reversed() {
             let src = result.substring(with: match.range(at: 2)).replacingOccurrences(of: "&amp;", with: "&")
-            guard let file = MarkdownImage.resolve(src, relativeTo: folder), file.isFileURL else { continue }
+            guard let file = MarkdownImage.resolve(src, relativeTo: folder), Safety.isMediaFile(file) else { continue }
             var href = images[file]
             if href == nil, let data = try? Data(contentsOf: file) {
                 let name = "images/img\(images.count + 1).\(file.pathExtension.lowercased())"

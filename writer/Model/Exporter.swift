@@ -8,7 +8,8 @@ enum MarkdownHTML {
     /// When true (PDF), videos become plain links because print can't play them.
     nonisolated(unsafe) static var videosAsLinks = false
 
-    static func convert(_ markdown: String) -> String {
+    /// `notePrefix` keeps footnote links unique when several chapters share one page.
+    static func convert(_ markdown: String, notePrefix: String = "") -> String {
         let (markdown, notes) = Footnotes.extract(FrontMatter.strip(markdown))
         var html: [String] = []
         var paragraph: [String] = []
@@ -77,7 +78,7 @@ enum MarkdownHTML {
         }
         if let block = code { html.append("<pre><code>\(escape(block.joined(separator: "\n")))</code></pre>") }
         flushAll()
-        return Footnotes.html(html.joined(separator: "\n"), notes: notes, inline: inline)
+        return Footnotes.html(html.joined(separator: "\n"), notes: notes, prefix: notePrefix, inline: inline)
     }
 
     private static func headingLevel(_ line: String) -> Int? {
@@ -129,8 +130,22 @@ enum MarkdownHTML {
             for (regex, template) in inlineRules {
                 s = regex.stringByReplacingMatches(in: s, range: NSRange(location: 0, length: (s as NSString).length), withTemplate: template)
             }
-            return s
+            return safeLinks(s)
         }.joined()
+    }
+
+    private static let hrefRegex = try! NSRegularExpression(pattern: #"<a href="([^"]*)""#)
+
+    /// javascript:, file: and app links become inert, in exports as in the preview.
+    private static func safeLinks(_ html: String) -> String {
+        guard html.contains("<a href=") else { return html }
+        let result = NSMutableString(string: html)
+        for m in hrefRegex.matches(in: html, range: NSRange(location: 0, length: result.length)).reversed() {
+            let href = result.substring(with: m.range(at: 1))
+            let safe = Safety.safeHref(href)
+            if safe != href { result.replaceCharacters(in: m.range(at: 1), with: safe) }
+        }
+        return result as String
     }
 
     private static let mediaRegex = try! NSRegularExpression(pattern: "!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+&quot;[^&]*&quot;)?\\)")
@@ -200,7 +215,7 @@ enum Exporter {
         for m in srcRegex.matches(in: html, range: NSRange(location: 0, length: result.length)).reversed() {
             let src = result.substring(with: m.range(at: 3)).replacingOccurrences(of: "&amp;", with: "&")
             guard !src.hasPrefix("http"), !src.hasPrefix("data:"),
-                  let file = MarkdownImage.resolve(src, relativeTo: folder), file.isFileURL,
+                  let file = MarkdownImage.resolve(src, relativeTo: folder), Safety.isMediaFile(file),
                   let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size < 25_000_000,
                   let data = try? Data(contentsOf: file) else { continue }
             let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
@@ -237,8 +252,7 @@ enum Exporter {
             let text = NSMutableString(string: markdown)
             var copied: [URL: String] = [:]
             for ref in MarkdownImage.references(in: markdown).reversed() {
-                guard let source = MarkdownImage.resolve(ref.path, relativeTo: folder), source.isFileURL,
-                      fm.fileExists(atPath: source.path) else { continue }
+                guard let source = MarkdownImage.resolve(ref.path, relativeTo: folder), Safety.isMediaFile(source) else { continue }
                 var name = copied[source]
                 if name == nil {
                     var candidate = source.lastPathComponent
@@ -326,7 +340,7 @@ enum Exporter {
             let parts = (titlePage ? [titleMarkdown] : []) + cleaned
             data = parts.joined(separator: "\n\n---\n\n").data(using: .utf8)
         case .html:
-            let sections = cleaned.map { "<section class=\"chapter\">\n\(MarkdownHTML.convert($0))\n</section>" }
+            let sections = cleaned.enumerated().map { "<section class=\"chapter\">\n\(MarkdownHTML.convert($0.element, notePrefix: "c\($0.offset + 1)-"))\n</section>" }
             let body = (titlePage ? titleHTML : "") + sections.joined(separator: "\n")
             let page = MarkdownHTML.document(title: title, body: body, style: style).replacingOccurrences(of: "</style>", with: bookCSS + "</style>")
             data = embedMedia(in: page, folder: folder).data(using: .utf8)

@@ -35,7 +35,7 @@ nonisolated enum Footnotes {
     }
 
     /// Footnoted HTML: references become numbered superscript links, notes a list at the end.
-    static func html(_ html: String, notes: [String: String], inline: (String) -> String) -> String {
+    static func html(_ html: String, notes: [String: String], prefix: String = "", inline: (String) -> String) -> String {
         let order = order(in: html, notes: notes)
         guard !order.isEmpty else { return html }
         let result = NSMutableString(string: html)
@@ -43,10 +43,10 @@ nonisolated enum Footnotes {
             let label = result.substring(with: match.range(at: 1))
             guard let index = order.firstIndex(of: label) else { continue }
             let n = index + 1
-            result.replaceCharacters(in: match.range, with: "<sup class=\"fnref\" id=\"fnref-\(n)\"><a href=\"#fn-\(n)\">\(n)</a></sup>")
+            result.replaceCharacters(in: match.range, with: "<sup class=\"fnref\" id=\"\(prefix)fnref-\(n)\"><a href=\"#\(prefix)fn-\(n)\">\(n)</a></sup>")
         }
         let items = order.enumerated().map { index, label in
-            "<li id=\"fn-\(index + 1)\"><p>\(inline(notes[label] ?? "")) <a href=\"#fnref-\(index + 1)\">↩</a></p></li>"
+            "<li id=\"\(prefix)fn-\(index + 1)\"><p>\(inline(notes[label] ?? "")) <a href=\"#\(prefix)fnref-\(index + 1)\">↩</a></p></li>"
         }
         return (result as String) + "\n<section class=\"footnotes\"><ol>\n" + items.joined(separator: "\n") + "\n</ol></section>"
     }

@@ -82,3 +82,37 @@ struct FootnoteAndEbookTests {
         #expect(CRC32.checksum(Data("123456789".utf8)) == 0xCBF4_3926)
     }
 }
+
+struct SafetyTests {
+    @Test func onlyWebAndMailLinksSurvive() {
+        #expect(Safety.safeHref("https://a.b/c?d=1&amp;e=2") == "https://a.b/c?d=1&amp;e=2")
+        #expect(Safety.safeHref("mailto:me@x.y") == "mailto:me@x.y")
+        #expect(Safety.safeHref("#fn-1") == "#fn-1")
+        #expect(Safety.safeHref("chapter-2.html") == "chapter-2.html")
+        #expect(Safety.safeHref("notes/a:b.md") == "notes/a:b.md")
+        #expect(Safety.safeHref("javascript:alert(1)") == "#")
+        #expect(Safety.safeHref("JavaScript:alert(1)") == "#")
+        #expect(Safety.safeHref("file:///etc/passwd") == "#")
+        #expect(Safety.safeHref("x-apple.systempreferences:com.apple") == "#")
+        #expect(!MarkdownHTML.convert("[click](javascript:alert(1))").contains("javascript"))
+        #expect(!Safety.isSafeLink(URL(string: "file:///Applications/Calculator.app")!))
+    }
+
+    @Test func onlyMediaFilesAreIncluded() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("wren-safety-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try "secret".write(to: folder.appendingPathComponent("keys.txt"), atomically: true, encoding: .utf8)
+        try Data([1]).write(to: folder.appendingPathComponent("photo.png"))
+        let post = PreparedPost(text: "![a](photo.png) ![b](keys.txt) ![c](\(folder.path)/keys.txt)", fallbackTitle: "T", folder: folder)
+        #expect(post.localMedia.map(\.path) == ["photo.png"])
+        let html = Exporter.embedMedia(in: "<img src=\"keys.txt\"><img src=\"photo.png\">", folder: folder)
+        #expect(html.contains("src=\"keys.txt\""))      // not embedded
+        #expect(html.contains("data:image/png;base64")) // the real image is
+    }
+
+    @Test func adminAddressesAreTrimmedToTheSite() {
+        #expect(PublishAccount(platform: .ghost, site: "https://me.ghost.io/ghost/").baseURL == "https://me.ghost.io")
+        #expect(PublishAccount(platform: .wordpress, site: "blog.example.com/wp-admin/").baseURL == "https://blog.example.com")
+    }
+}

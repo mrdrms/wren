@@ -226,7 +226,7 @@ final class LibraryStore {
             guard URL(string: reference.path)?.scheme == nil, !path.hasPrefix("/"), !path.contains("..") else { continue }
             let source = oldFolder.appendingPathComponent(path)
             let destination = newFolder.appendingPathComponent(path)
-            guard fm.fileExists(atPath: source.path), !fm.fileExists(atPath: destination.path) else { continue }
+            guard Safety.isMediaFile(source), !fm.fileExists(atPath: destination.path) else { continue }
             try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? fm.copyItem(at: source, to: destination)
         }

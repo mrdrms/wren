@@ -72,10 +72,15 @@ struct PublishAccount: Codable, Identifiable, Hashable {
     var keychainKey: String { "publish-\(id.uuidString)" }
     var secret: String? { Keychain.get(keychainKey) }
 
-    /// The site without a trailing slash, with https:// added if it was left out.
+    /// The site without a trailing slash, with https:// added if it was left out. An admin
+    /// address pasted in by mistake (…/ghost/, …/wp-admin) is trimmed to the site.
     var baseURL: String {
         var value = site.trimmingCharacters(in: .whitespacesAndNewlines)
         if !value.isEmpty, !value.contains("://") { value = "https://" + value }
+        while value.hasSuffix("/") { value.removeLast() }
+        for suffix in ["/ghost", "/wp-admin", "/wp-login.php"] where value.lowercased().hasSuffix(suffix) {
+            value.removeLast(suffix.count)
+        }
         while value.hasSuffix("/") { value.removeLast() }
         return value
     }
@@ -108,8 +113,7 @@ struct PreparedPost {
             .filter { !$0.isEmpty }
         var media: [(String, URL)] = []
         for reference in MarkdownImage.references(in: body) where !media.contains(where: { $0.0 == reference.path }) {
-            if let file = MarkdownImage.resolve(reference.path, relativeTo: folder), file.isFileURL,
-               FileManager.default.fileExists(atPath: file.path) {
+            if let file = MarkdownImage.resolve(reference.path, relativeTo: folder), Safety.isMediaFile(file) {
                 media.append((reference.path, file))
             }
         }
@@ -151,6 +155,10 @@ enum Publisher {
     /// Posts `post` and returns its web address when the platform reports one.
     static func publish(_ post: PreparedPost, to account: PublishAccount, asDraft: Bool) async throws -> URL? {
         guard let secret = account.secret, !secret.isEmpty else { throw PublishError.missingSecret }
+        // Keys never travel unencrypted.
+        if account.platform.sitePrompt != nil, account.platform != .hashnode, !account.baseURL.lowercased().hasPrefix("https://") {
+            throw PublishError.server("The site address must start with https:// so your key travels encrypted.")
+        }
         var uploaded: [String: String] = [:]
         if account.platform.uploadsImages {
             for item in post.localMedia {
@@ -170,10 +178,13 @@ enum Publisher {
     private static func uploadMedia(_ file: URL, to account: PublishAccount, secret: String) async throws -> String {
         let data = try Data(contentsOf: file)
         let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        // Quotes or line breaks in a file name would break the upload's headers.
+        let base = ImageImporter.slug(file.deletingPathExtension().lastPathComponent)
+        let name = (base.isEmpty ? "image" : base) + "." + file.pathExtension.lowercased()
         switch account.platform {
         case .ghost:
             var request = try ghostRequest(account, path: "images/upload/", secret: secret)
-            let form = Multipart(fields: ["purpose": "image", "ref": file.lastPathComponent], file: (file.lastPathComponent, mime, data))
+            let form = Multipart(fields: ["purpose": "image", "ref": name], file: (name, mime, data))
             form.apply(to: &request)
             let json = try await send(request)
             guard let url = ((json["images"] as? [[String: Any]])?.first?["url"]) as? String else { throw PublishError.server("Ghost didn't return the image address.") }
@@ -184,7 +195,7 @@ enum Publisher {
             request.httpMethod = "POST"
             request.setValue(basicAuth(account.username, secret), forHTTPHeaderField: "Authorization")
             request.setValue(mime, forHTTPHeaderField: "Content-Type")
-            request.setValue("attachment; filename=\"\(file.lastPathComponent)\"", forHTTPHeaderField: "Content-Disposition")
+            request.setValue("attachment; filename=\"\(name)\"", forHTTPHeaderField: "Content-Disposition")
             request.httpBody = data
             let json = try await send(request)
             guard let url = json["source_url"] as? String else { throw PublishError.server("WordPress didn't return the image address.") }
@@ -193,8 +204,8 @@ enum Publisher {
             var request = URLRequest(url: URL(string: "https://micro.blog/micropub/media")!)
             request.httpMethod = "POST"
             request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
-            Multipart(fields: [:], file: (file.lastPathComponent, mime, data)).apply(to: &request)
-            let (_, response) = try await URLSession.shared.data(for: request)
+            Multipart(fields: [:], file: (name, mime, data)).apply(to: &request)
+            let (_, response) = try await Safety.credentialSession.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
                   let location = http.value(forHTTPHeaderField: "Location") else { throw PublishError.server("Micro.blog didn't accept the image.") }
             return location
@@ -267,7 +278,7 @@ enum Publisher {
         if draft { fields.append(("post-status", "draft")) }
         fields += post.tags.map { ("category[]", $0) }
         request.httpBody = fields.map { "\($0.0)=\(formEncode($0.1))" }.joined(separator: "&").data(using: .utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Safety.credentialSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw PublishError.server("No response from Micro.blog.") }
         guard (200..<300).contains(http.statusCode) else { throw PublishError.server(serverMessage(data, status: http.statusCode)) }
         return http.value(forHTTPHeaderField: "Location").flatMap(URL.init(string:))
@@ -330,7 +341,7 @@ enum Publisher {
     // MARK: HTTP
 
     private static func send(_ request: URLRequest) async throws -> [String: Any] {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Safety.credentialSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw PublishError.server("No response from the server.") }
         guard (200..<300).contains(http.statusCode) else { throw PublishError.server(serverMessage(data, status: http.statusCode)) }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]

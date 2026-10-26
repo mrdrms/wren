@@ -182,13 +182,22 @@ struct BlogPreview: NSViewRepresentable {
             }
         }
 
-        /// Links open in the browser; the preview itself never navigates away.
+        /// Web and mail links open in your browser; the preview itself never navigates away.
+        /// Other kinds of link (file:, app URL schemes) are ignored: they could open an app.
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
-            if action.navigationType == .linkActivated, let url = action.request.url {
-                NSWorkspace.shared.open(url)
+            let url = action.request.url
+            if action.navigationType == .linkActivated {
+                // In-page anchors (footnotes and their back-links) scroll the preview itself.
+                if let url, url.host == "preview.wren.local", url.fragment != nil, url.path.isEmpty || url.path == "/" {
+                    return decisionHandler(.allow)
+                }
+                if let url, Safety.isSafeLink(url) { NSWorkspace.shared.open(url) }
                 decisionHandler(.cancel)
+            } else if action.targetFrame?.isMainFrame == false {
+                decisionHandler(.allow) // embeds such as YouTube load in their own frame
             } else {
-                decisionHandler(.allow)
+                // The main frame only ever shows the page Wren loads into it.
+                decisionHandler(url?.host == "preview.wren.local" || url?.scheme == "about" ? .allow : .cancel)
             }
         }
 
@@ -242,7 +251,8 @@ final class AssetSchemeHandler: NSObject, WKURLSchemeHandler {
         let file: URL? = path.hasPrefix("file/")
             ? URL(fileURLWithPath: String(path.dropFirst(4)))
             : folder?.appendingPathComponent(path).standardizedFileURL
-        guard let file, let data = try? Data(contentsOf: file) else {
+        // Images and videos only: the page can't use this to read your other files.
+        guard let file, Safety.isMediaFile(file), let data = try? Data(contentsOf: file) else {
             task.didFailWithError(URLError(.fileDoesNotExist))
             return
         }

@@ -70,7 +70,7 @@ struct PublishSheet: View {
                 switch outcome {
                 case .success(let url):
                     Label(asDraft ? "Saved as a draft." : "Published.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    if let url { Link("Open \(url.host() ?? "post")", destination: url) }
+                    if let url, Safety.isSafeLink(url) { Link("Open \(url.host() ?? "post")", destination: url) }
                 case .failure(let error):
                     Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red).textSelection(.enabled)
@@ -96,7 +96,8 @@ struct PublishSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.glassProminent)
-                .disabled(account == nil || working)
+                // Once it's posted, a second click would post it twice.
+                .disabled(account == nil || working || (try? outcome?.get()) != nil)
             }
         }
         .padding(22)
@@ -205,7 +206,10 @@ struct AISettings: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
-        .onChange(of: model.prefs.aiProvider) { refresh() }
+        .onChange(of: model.prefs.aiProvider) {
+            key = "" // a half-typed key belongs to the provider it was typed for
+            refresh()
+        }
     }
 
     private func refresh() {
@@ -323,9 +327,13 @@ struct AIPane: View {
         .buttonStyle(.plain)
     }
 
-    /// Markdown answers with their line breaks kept (inline styling only).
+    /// Markdown answers with their line breaks kept (inline styling only). Links are shown as
+    /// plain text: an answer can echo instructions hidden in a document, so nothing in it is
+    /// clickable.
     static func render(_ markdown: String) -> AttributedString {
         let tidy = markdown.replacingOccurrences(of: #"(?m)^#{1,6} +"#, with: "", options: .regularExpression)
-        return (try? AttributedString(markdown: tidy, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(markdown)
+        var text = (try? AttributedString(markdown: tidy, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(markdown)
+        for run in text.runs where run.link != nil { text[run.range].link = nil }
+        return text
     }
 }

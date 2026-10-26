@@ -37,6 +37,12 @@ extension AppModel {
             showToast("Turn on the AI editor in Settings → AI", symbol: "sparkle")
             return
         }
+        guard aiBusy == nil else {
+            showToast("The AI editor is still working on \(aiBusy ?? "something")", symbol: "hourglass")
+            return
+        }
+        // Keys, tokens and passwords in the text shouldn't go to an AI service any more than to a blog.
+        guard confirmNoSecrets(action: "Send", in: prompt) else { return }
         let client = AIClient(provider: prefs.aiProvider, model: prefs.aiModel, effort: effort)
         let run = { [weak self] in
             guard let self else { return }
@@ -91,17 +97,19 @@ extension AppModel {
 
     func aiCritique() {
         guard loadedURL != nil else { return }
-        let request = AIEditor.critiquePrompt(title: currentTitle, text: Ghost.clean(text))
+        let title = currentTitle // the answer is about this sheet, even if you've moved on
+        let request = AIEditor.critiquePrompt(title: title, text: Ghost.clean(text))
         ask("Editor's read", system: request.system, prompt: request.prompt) { [weak self] answer in
-            self?.showResult("Editor's read: \(self?.currentTitle ?? "")", answer)
+            self?.showResult("Editor's read: \(title)", answer)
         }
     }
 
     func aiTitles() {
         guard loadedURL != nil else { return }
         let request = AIEditor.titlesPrompt(text: Ghost.clean(text))
+        let title = currentTitle
         ask("Title ideas", system: request.system, prompt: request.prompt) { [weak self] answer in
-            self?.showResult("Title ideas", answer)
+            self?.showResult("Title ideas for \(title)", answer)
         }
     }
 
@@ -120,7 +128,8 @@ extension AppModel {
         ask("Continuity check", system: request.system, prompt: request.prompt,
             previewText: "All \(chapters.count) chapters of “\(bookTitle(book))” (\(words.formatted()) words), with these instructions:\n\n\(request.system)\n\n\(request.prompt)",
             effort: "high") { [weak self] answer in
-            self?.showResult("Continuity: \(self?.bookTitle(book) ?? "")", answer)
+            guard let self else { return }
+            self.showResult("Continuity: \(self.bookTitle(book))", answer)
         }
     }
 
@@ -139,7 +148,7 @@ extension AppModel {
         let folder = url.deletingLastPathComponent()
         let missing = MarkdownImage.references(in: text).filter { reference in
             reference.alt.trimmingCharacters(in: .whitespaces).isEmpty && MarkdownImage.kind(of: reference.path) == .image
-                && MarkdownImage.resolve(reference.path, relativeTo: folder).map { $0.isFileURL && FileManager.default.fileExists(atPath: $0.path) } == true
+                && MarkdownImage.resolve(reference.path, relativeTo: folder).map(Safety.isMediaFile) == true
         }
         guard !missing.isEmpty else { return showToast("Every image here already has alt text", symbol: "checkmark.circle") }
         let images = missing.prefix(12).compactMap { reference -> (path: String, data: Data, mime: String)? in

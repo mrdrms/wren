@@ -1257,8 +1257,8 @@ final class AppModel {
 
     /// Before anything leaves Wren, check it for keys, tokens and internal addresses.
     /// Returns whether to go ahead.
-    func confirmNoSecrets(action: String) -> Bool {
-        let findings = SecretScanner.scan(Ghost.clean(text))
+    func confirmNoSecrets(action: String, in content: String? = nil) -> Bool {
+        let findings = SecretScanner.scan(Ghost.clean(content ?? text))
         guard !findings.isEmpty else { return true }
         let alert = NSAlert()
         alert.alertStyle = .warning
