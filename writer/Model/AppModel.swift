@@ -205,6 +205,11 @@ final class AppModel {
     @ObservationIgnored private var wordsAtOpen = 0
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var typingTask: Task<Void, Never>?
+    /// The sheet's text as it was last read from or written to disk, to notice edits made
+    /// in another app.
+    @ObservationIgnored private var diskText: String?
+    /// An outside edit was just pulled in: it isn't your writing, so it earns no words.
+    @ObservationIgnored private var skipNextCredit = false
     @ObservationIgnored private var analysisTask: Task<Void, Never>?
     @ObservationIgnored private var editGeneration = 0
     @ObservationIgnored private var dirty = false
@@ -277,6 +282,7 @@ final class AppModel {
         if loadedURL != nil { previousURL = loadedURL }
         loadedURL = url
         text = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+        diskText = url == nil ? nil : text
         loadToken += 1
         cuts = url.map { CuttingRoom.load(for: $0) } ?? []
         startHistory()
@@ -343,6 +349,10 @@ final class AppModel {
     private func creditNewWords() {
         let delta = stats.words - lastWordCount
         lastWordCount = stats.words
+        if skipNextCredit {
+            skipNextCredit = false
+            return
+        }
         if delta > 0 {
             // Cap per-pause credit so pasting a chapter doesn't count as writing it.
             let credited = min(delta, 30)
@@ -362,7 +372,15 @@ final class AppModel {
         guard dirty, let url = loadedURL else { return }
         dirty = false
         do {
+            // Changed in another app since we last saw it? Keep that version as a snapshot
+            // before ours replaces it, so neither side is lost.
+            if let onDisk = try? String(contentsOf: url, encoding: .utf8), let known = diskText, onDisk != known, onDisk != text {
+                _ = try? SnapshotStore.take(of: url, text: onDisk)
+                snapshots = SnapshotStore.list(for: url)
+                showToast("This sheet was also changed in another app. That version is saved in Time Machine.", symbol: "arrow.triangle.branch")
+            }
             try text.write(to: url, atomically: true, encoding: .utf8)
+            diskText = text
             library.updateSheet(at: url, text: text)
             recordHistory()
             autoTitleIfNeeded(url)
@@ -425,6 +443,17 @@ final class AppModel {
         }
         if let companion, let moved = Self.relocated(companion.url, from: old, to: new) { companion.moved(to: moved) }
         if let previous = previousURL, let moved = Self.relocated(previous, from: old, to: new) { previousURL = moved }
+    }
+
+    /// Back in Wren: if the open sheet was edited elsewhere and you have nothing unsaved,
+    /// show the new version (keeping your place). With unsaved work, saving handles it.
+    func reloadIfChangedOnDisk() {
+        guard !dirty, let url = loadedURL, let known = diskText,
+              let onDisk = try? String(contentsOf: url, encoding: .utf8), onDisk != known, onDisk != text else { return }
+        skipNextCredit = true
+        editor?.replaceAll(with: onDisk, keepSelection: true)
+        diskText = onDisk
+        showToast("Updated with changes made in another app", symbol: "arrow.clockwise")
     }
 
     // MARK: Second editor

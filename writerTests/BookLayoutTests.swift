@@ -131,3 +131,33 @@ struct MoveMediaTests {
         #expect(moved.lastPathComponent == "Post.md")
     }
 }
+
+@MainActor
+struct OutsideChangeTests {
+    @Test func dividerAtTheTopIsNotFrontMatter() {
+        let prose = "---\nIt was a dark and stormy night, and the rain fell in torrents.\n---\nMore story."
+        #expect(FrontMatter.range(in: prose) == nil)
+        #expect(FrontMatter.strip(prose) == prose)
+        let hugo = "---\ntitle: \"Post\"\ntags:\n  - swift\n  - writing\n# a comment\ndraft: false\n---\nBody"
+        #expect(FrontMatter.strip(hugo) == "Body")
+    }
+
+    @Test func outsideEditIsKeptAsASnapshotBeforeSaving() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("wren-outside-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("Notes.md")
+        defer {
+            SnapshotStore.list(for: url).forEach(SnapshotStore.delete)
+            try? FileManager.default.removeItem(at: folder)
+        }
+        try "original".write(to: url, atomically: true, encoding: .utf8)
+        let sheet = try #require(CompanionSheet(url: url, library: LibraryStore()))
+
+        try "changed in another app".write(to: url, atomically: true, encoding: .utf8)
+        sheet.textDidChange("changed in Wren")
+        #expect(sheet.saveNow())
+
+        #expect(try String(contentsOf: url, encoding: .utf8) == "changed in Wren")
+        #expect(SnapshotStore.list(for: url).map(SnapshotStore.text) == ["changed in another app"])
+    }
+}

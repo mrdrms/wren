@@ -117,6 +117,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.library.refresh()
+            model.reloadIfChangedOnDisk()
         }
         .onAppear {
             // Minimal mode: a deliberate move of the pointer (not a brush of the trackpad while

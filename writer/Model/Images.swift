@@ -84,6 +84,14 @@ nonisolated enum FrontMatter {
             guard ns.character(at: end) == 10 || ns.character(at: end) == 13 else { return nil }
             end += 1
         }
+        // A sheet that merely opens with a divider isn't metadata: every line between the
+        // fences has to look like YAML (`key: value`, list items, indented values, comments).
+        let inner = ns.substring(with: NSRange(location: 3, length: closing.location - 3))
+        let lines = inner.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !lines.isEmpty, lines.allSatisfy({ line in
+            line.first?.isWhitespace == true || line.hasPrefix("- ") || line.hasPrefix("#")
+                || line.range(of: #"^[A-Za-z0-9_][\w .-]*:(\s|$)"#, options: .regularExpression) != nil
+        }) else { return nil }
         return NSRange(location: 0, length: end)
     }
 

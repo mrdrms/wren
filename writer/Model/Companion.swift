@@ -11,12 +11,15 @@ final class CompanionSheet {
 
     @ObservationIgnored private let library: LibraryStore
     @ObservationIgnored private var dirty = false
+    /// The text as last read from or written to disk.
+    @ObservationIgnored private var diskText: String
     @ObservationIgnored private var saveTask: Task<Void, Never>?
 
     init?(url: URL, library: LibraryStore) {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         self.url = url
         self.text = text
+        self.diskText = text
         self.library = library
     }
 
@@ -43,7 +46,12 @@ final class CompanionSheet {
         saveTask?.cancel()
         guard dirty else { return true }
         do {
+            // Edited in another app meanwhile? Keep that version as a snapshot first.
+            if let onDisk = try? String(contentsOf: url, encoding: .utf8), onDisk != diskText, onDisk != text {
+                _ = try? SnapshotStore.take(of: url, text: onDisk)
+            }
             try text.write(to: url, atomically: true, encoding: .utf8)
+            diskText = text
             dirty = false
             library.updateSheet(at: url, text: text)
             return true
