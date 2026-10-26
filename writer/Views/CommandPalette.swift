@@ -192,6 +192,7 @@ struct CommandPalette: View {
             PaletteItem(id: "journey", title: "Writing Journey", subtitle: "Streaks and history", symbol: "chart.line.uptrend.xyaxis", shortcut: "⇧⌘J") { m.showJourney = true },
             PaletteItem(id: "snapshot", title: "Take Snapshot", subtitle: nil, symbol: "camera", shortcut: "⇧⌘S") { m.takeSnapshot() },
             PaletteItem(id: "library", title: m.navigatorPage == .library ? "Show Sheets" : "Show Library", subtitle: "Your folders and projects", symbol: "books.vertical", shortcut: "⌥⌘L") { m.toggleLibrary() },
+            PaletteItem(id: "companion", title: m.companion == nil ? "Open Second Editor" : "Close Second Editor", subtitle: "Notes or another chapter beside your page", symbol: "rectangle.split.2x1", shortcut: "⌥⌘3") { m.toggleCompanion() },
             PaletteItem(id: "inspector", title: "Toggle Inspector", subtitle: nil, symbol: "sidebar.trailing", shortcut: "⌥⌘I") { m.showInspector.toggle() },
             PaletteItem(id: "goal", title: "Set Word Goal…", subtitle: nil, symbol: "target", shortcut: nil) { m.inspectorTab = .goals; m.showInspector = true },
             PaletteItem(id: "outline", title: "Show Outline", subtitle: nil, symbol: "list.bullet.indent", shortcut: nil) { m.inspectorTab = .outline; m.showInspector = true },

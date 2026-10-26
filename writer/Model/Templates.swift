@@ -8,7 +8,16 @@ struct SheetTemplate: Identifiable {
     let symbol: String
     let tint: UInt32
     let summary: String
+    var category: TemplateCategory = .general
     let body: String
+}
+
+/// How the gallery groups sheet templates.
+enum TemplateCategory: String, CaseIterable {
+    case general = "Start Fresh"
+    case book = "Books & Fiction"
+    case articles = "Articles & Posts"
+    case personal = "Personal"
 }
 
 enum ProjectKind: String, Codable, CaseIterable {
@@ -75,6 +84,7 @@ enum Templates {
 
     static let blogPost = SheetTemplate(id: "blog", name: "Blog Post", symbol: "newspaper", tint: 0xE8590C,
         summary: "Hook, problem, idea, steps and a call to action. Front matter included.",
+        category: .articles,
         body: """
         ---
         title: "{{title}}"
@@ -106,6 +116,7 @@ enum Templates {
 
     static let newsletter = SheetTemplate(id: "newsletter", name: "Newsletter", symbol: "envelope.open", tint: 0x0A84A8,
         summary: "A friendly issue: a note, the main story, quick links and a sign-off.",
+        category: .articles,
         body: """
         # {{title}}
 
@@ -134,6 +145,7 @@ enum Templates {
 
     static let essay = SheetTemplate(id: "essay", name: "Essay", symbol: "text.book.closed", tint: 0x5E5CE6,
         summary: "Thesis, three supporting points, a counterargument and a conclusion.",
+        category: .articles,
         body: """
         # {{title}}
 
@@ -158,6 +170,7 @@ enum Templates {
 
     static let howTo = SheetTemplate(id: "howto", name: "How-To Guide", symbol: "list.number", tint: 0x34C759,
         summary: "What you'll need, numbered steps, tips and troubleshooting.",
+        category: .articles,
         body: """
         ---
         title: "{{title}}"
@@ -186,35 +199,9 @@ enum Templates {
         **It didn't work?**
         """)
 
-    static let review = SheetTemplate(id: "review", name: "Review", symbol: "star.leadinghalf.filled", tint: 0xFFB800,
-        summary: "For a product, book or film: verdict, pros and cons, who it's for.",
-        body: """
-        ---
-        title: "{{title}}"
-        date: {{date}}
-        rating: 4/5
-        ---
-
-        **The verdict:** {>>Your opinion in one sentence. Busy readers stop here.<<}
-
-        ## What it is
-
-        ## What I loved
-
-        -
-        -
-
-        ## What could be better
-
-        -
-
-        ## Who it's for
-
-        {>>Who should get it, and who should skip it?<<}
-        """)
-
     static let shortStory = SheetTemplate(id: "story", name: "Short Story", symbol: "sparkles", tint: 0xAF52DE,
         summary: "A scene-by-scene shape: opening image, turn, climax and resolution.",
+        category: .book,
         body: """
         # {{title}}
 
@@ -234,19 +221,25 @@ enum Templates {
         """)
 
     static let chapter = SheetTemplate(id: "chapter", name: "Book Chapter", symbol: "book.pages", tint: 0xB5651D,
-        summary: "A chapter with a scene goal, conflict and a hook into the next one.",
+        summary: "Scenes split by breaks, each with a goal, an obstacle and an outcome, plus a hook.",
+        category: .book,
         body: """
         # Chapter {{chapter}}
 
-        {>>Scene goal: what does the point-of-view character want in this chapter?<<}
+        {>>Chapter purpose: what changes for the story by the end of this chapter? If nothing changes, cut or merge it.<<}
 
-        {>>Conflict: what stands in the way?<<}
+        {>>Scene 1. Point of view: whose eyes are we in? Goal: what do they want right now? Obstacle: what's in the way? Outcome: usually "no, and…" or "yes, but…".<<}
+
+        * * *
+
+        {>>Scene 2. The reaction: how does the character feel about what just happened, and what do they decide to do next?<<}
 
         {>>Hook: end on a question, a reveal or a decision that pulls readers into the next chapter.<<}
         """)
 
     static let journal = SheetTemplate(id: "journal", name: "Journal Entry", symbol: "sun.max", tint: 0xFF9F0A,
         summary: "Today's date, three prompts and a line for gratitude.",
+        category: .personal,
         body: """
         # {{longdate}}
 
@@ -259,17 +252,9 @@ enum Templates {
         **Grateful for:**
         """)
 
-    static let poem = SheetTemplate(id: "poem", name: "Poem", symbol: "leaf", tint: 0xFF6482,
-        summary: "A quiet page with room for stanzas.",
-        body: """
-        # {{title}}
-
-        {>>Start with an image you can see, hear or touch. Trust the line breaks.<<}
-
-        """)
-
     static let character = SheetTemplate(id: "character", name: "Character Profile", symbol: "person.text.rectangle", tint: 0x64D2FF,
         summary: "Wants, needs, flaws and voice for a character in your story.",
+        category: .book,
         body: """
         # {{title}}
 
@@ -294,6 +279,7 @@ enum Templates {
 
     static let outline = SheetTemplate(id: "outline", name: "Story Outline", symbol: "list.bullet.indent", tint: 0x30B0C7,
         summary: "Three acts with the key beats every story needs.",
+        category: .book,
         body: """
         # {{title}} — Outline
 
@@ -317,21 +303,106 @@ enum Templates {
         - **Final image:** {>>Mirror the opening image to show how things changed.<<}
         """)
 
-    static let sheets: [SheetTemplate] = [blank, blogPost, newsletter, essay, howTo, review, shortStory, chapter, journal, poem, character, outline]
+    static let scene = SheetTemplate(id: "scene", name: "Scene", symbol: "film", tint: 0xD9480F,
+        summary: "One scene, built to move: goal, conflict, a turn and what it leaves behind.",
+        category: .book,
+        body: """
+        # {{title}}
+
+        {>>Where and when: one sentence. Then drop us in late, as close to the conflict as you can.<<}
+
+        {>>Goal: what does the point-of-view character want in this scene?<<}
+
+        {>>Conflict: who or what pushes back? Let it escalate at least once.<<}
+
+        {>>The turn: something changes. A secret comes out, a plan fails, a choice is made.<<}
+
+        {>>Aftermath: what's different now, and what does it set up?<<}
+        """)
+
+    static let setting = SheetTemplate(id: "setting", name: "Setting", symbol: "map", tint: 0x5F7A4F,
+        summary: "A place in your story: the senses, the rules and what it means to the people there.",
+        category: .book,
+        body: """
+        # {{title}}
+
+        **Where it is:**
+
+        **When we see it:** {>>Time of day, season, era.<<}
+
+        **First impression:** {>>What a newcomer notices in the first five seconds.<<}
+
+        ## The senses
+
+        - **Sight:**
+        - **Sound:**
+        - **Smell:**
+        - **Touch:**
+
+        ## Rules
+
+        {>>Who's in charge here, what's forbidden, what it costs to live here.<<}
+
+        ## What it means
+
+        {>>Why this place matters to your characters. Safety, danger, memory, longing?<<}
+        """)
+
+    static let synopsis = SheetTemplate(id: "synopsis", name: "Synopsis", symbol: "doc.plaintext", tint: 0x8E6E53,
+        summary: "The whole story in a page, ending included, the way agents and editors ask for it.",
+        category: .book,
+        body: """
+        # {{title}}: Synopsis
+
+        {>>Present tense, third person, about one page. Name only the characters that matter, and give away the ending.<<}
+
+        {>>Setup: who is the protagonist, what do they want, and what's wrong in their world?<<}
+
+        {>>The inciting incident, and the choice that pulls them into the story.<<}
+
+        {>>The middle: the biggest complications, and the midpoint that raises the stakes.<<}
+
+        {>>The crisis: the lowest point, and the hard choice it forces.<<}
+
+        {>>The climax and resolution: how it ends, and how the protagonist has changed.<<}
+        """)
+
+    static let queryLetter = SheetTemplate(id: "query", name: "Query Letter", symbol: "envelope", tint: 0x0A84A8,
+        summary: "Pitch your book to agents: hook, story, the details and a short bio.",
+        category: .book,
+        body: """
+        Dear {>>Agent's name. Always personalize it.<<},
+
+        {>>Why them: one sentence on why your book fits their list.<<}
+
+        {>>The hook and story: two or three short paragraphs. Who your protagonist is, what they want, what stands in the way, and what they stand to lose. Don't give away the ending.<<}
+
+        *{{title}}* is a {>>genre<<} novel complete at {>>word count<<} words. It will appeal to readers of {>>two recent comparable titles<<}.
+
+        {>>About you: a few sentences. Writing credits, or why you're the person to write this book.<<}
+
+        Thank you for your time and consideration.
+
+        Best wishes,
+        """)
+
+    static let sheets: [SheetTemplate] = [blank, chapter, scene, character, setting, outline, synopsis, queryLetter, shortStory,
+                                          blogPost, howTo, essay, newsletter, journal]
 
     // MARK: Projects
 
     static let projects: [ProjectTemplate] = [
         ProjectTemplate(id: "novel", name: "Novel", symbol: "book.closed.fill", tint: 0xB5651D,
-            summary: "Numbered chapters, character and setting notes, an outline and an 80,000-word goal. Compiles to Word or PDF.",
+            summary: "Numbered chapters, plus an outline, synopsis, character and setting notes. 80,000-word goal; compiles to Word or PDF.",
             kind: .book, goal: 80_000,
             files: [
                 ("01 Chapter One.md", chapter.body.replacingOccurrences(of: "{{chapter}}", with: "1")),
                 ("02 Chapter Two.md", chapter.body.replacingOccurrences(of: "{{chapter}}", with: "2")),
                 ("03 Chapter Three.md", chapter.body.replacingOccurrences(of: "{{chapter}}", with: "3")),
                 ("Notes/Outline.md", outline.body),
+                ("Notes/Synopsis.md", synopsis.body),
                 ("Notes/Main Character.md", character.body.replacingOccurrences(of: "{{title}}", with: "Main Character")),
-                ("Notes/Setting.md", "# Setting\n\n**Where:** \n\n**When:** \n\n**What it feels like to be there:** \n\n{>>Smells, sounds, weather, rules. The details that make a place real.<<}\n"),
+                ("Notes/Setting.md", setting.body.replacingOccurrences(of: "{{title}}", with: "Main Setting")),
             ]),
         ProjectTemplate(id: "nonfiction", name: "Non-fiction Book", symbol: "books.vertical.fill", tint: 0x5E5CE6,
             summary: "Introduction, chapters and a conclusion, plus a research folder and a 60,000-word goal.",

@@ -143,6 +143,12 @@ final class AppModel {
     var searchText = ""
     var columnVisibility: NavigationSplitViewVisibility = .all
 
+    // Second editor
+    private(set) var companion: CompanionSheet?
+    @ObservationIgnored weak var companionEditor: WrenTextView?
+    /// The sheet open before this one, offered when the second editor opens without a target.
+    @ObservationIgnored private var previousURL: URL?
+
     // Current document
     private(set) var loadedURL: URL?
     private(set) var text = ""
@@ -255,6 +261,9 @@ final class AppModel {
         saveNow()
         autoSnapshotIfNeeded()
         stopReading()
+        // One sheet, one editor: opening the second editor's sheet here closes it there.
+        if let url, url == companion?.url { companion = nil }
+        if loadedURL != nil { previousURL = loadedURL }
         loadedURL = url
         text = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
         loadToken += 1
@@ -315,6 +324,9 @@ final class AppModel {
     }
 
     func saveNow() {
+        if companion?.saveNow() == false {
+            showToast("Couldn't save the second editor's sheet", symbol: "exclamationmark.triangle.fill")
+        }
         saveTask?.cancel()
         guard dirty, let url = loadedURL else { return }
         dirty = false
@@ -351,6 +363,55 @@ final class AppModel {
             loadedURL = new
             selectedSheet = new
         }
+        if companion?.url == old { companion?.moved(to: new) }
+        if previousURL == old { previousURL = new }
+    }
+
+    // MARK: Second editor
+
+    /// Opens a sheet in the second editor, beside the one you're writing.
+    func openBeside(_ url: URL) {
+        guard url != loadedURL else { return showToast("That sheet is already open", symbol: "rectangle.split.2x1") }
+        guard url != companion?.url else { return }
+        companion?.saveNow()
+        guard let sheet = CompanionSheet(url: url, library: library) else {
+            return showToast("Couldn't open that sheet", symbol: "exclamationmark.triangle.fill")
+        }
+        withAnimation(.smooth(duration: 0.3)) {
+            if previewMode != .off { previewMode = .off }
+            boardMode = false
+            companion = sheet
+        }
+    }
+
+    func closeCompanion() {
+        companion?.saveNow()
+        withAnimation(.smooth(duration: 0.3)) { companion = nil }
+        editor?.window?.makeFirstResponder(editor)
+    }
+
+    /// ⌥⌘3: closes the second editor, or opens it with the sheet you were on before.
+    func toggleCompanion() {
+        if companion != nil { return closeCompanion() }
+        let fallback = visibleSheets.first { $0.url != loadedURL }?.url
+        guard let url = previousURL.flatMap({ FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }) ?? fallback else {
+            return showToast("Right-click a sheet and choose Open Beside", symbol: "rectangle.split.2x1")
+        }
+        openBeside(url)
+    }
+
+    func swapEditors() {
+        guard let other = companion?.url, let main = loadedURL else { return }
+        saveNow() // both sides hit disk before either reloads
+        guard let sheet = CompanionSheet(url: main, library: library) else { return }
+        companion = sheet
+        selectedSheet = other
+    }
+
+    func openCompanionInMain() {
+        guard let url = companion?.url else { return }
+        closeCompanion()
+        selectedSheet = url
     }
 
     // MARK: Sheets & folders
@@ -524,6 +585,10 @@ final class AppModel {
     }
 
     func trash(_ url: URL) {
+        if let companion, companion.url == url || companion.url.path.hasPrefix(url.path + "/") {
+            companion.saveNow()
+            self.companion = nil
+        }
         if url == loadedURL {
             saveNow()
             dirty = false
@@ -553,10 +618,17 @@ final class AppModel {
 
     // MARK: Editing commands
 
+    /// The editor you're typing in: the second one when it has focus, otherwise the main one.
+    private var focusedEditor: WrenTextView? {
+        if let companionEditor, companion != nil, companionEditor.window?.firstResponder === companionEditor { return companionEditor }
+        return editor
+    }
+
     func format(_ action: FormatAction) {
-        guard let editor else { return }
+        guard let editor = focusedEditor else { return }
         if case .link = action {
-            beginLink()
+            // The link sheet edits the main sheet; the second editor isn't wired to it.
+            if editor === self.editor { beginLink() }
             return
         }
         editor.apply(action)

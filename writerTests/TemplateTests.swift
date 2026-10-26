@@ -58,3 +58,39 @@ struct TemplateTests {
         #expect(first.hasPrefix("# Chapter 3"))
     }
 }
+
+@MainActor
+struct CompanionTests {
+    @Test func secondEditorSavesItsOwnSheet() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("wren-companion-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("Notes.md")
+        try "# Notes\n\nFirst idea.".write(to: url, atomically: true, encoding: .utf8)
+
+        let sheet = try #require(CompanionSheet(url: url, library: LibraryStore()))
+        #expect(sheet.title == "Notes")
+        sheet.textDidChange("# Notes\n\nFirst idea. Second idea.")
+        #expect(sheet.saveNow())
+        #expect(try String(contentsOf: url, encoding: .utf8).hasSuffix("Second idea."))
+
+        let moved = folder.appendingPathComponent("Ideas.md")
+        try FileManager.default.moveItem(at: url, to: moved)
+        sheet.moved(to: moved)
+        sheet.textDidChange("# Ideas")
+        #expect(sheet.saveNow())
+        #expect(try String(contentsOf: moved, encoding: .utf8) == "# Ideas")
+        #expect(CompanionSheet(url: folder.appendingPathComponent("Missing.md"), library: LibraryStore()) == nil)
+    }
+
+    @Test func everyTemplateHasACategoryAndRenders() {
+        let ids = Templates.sheets.map(\.id)
+        #expect(Set(ids).count == ids.count)
+        for category in TemplateCategory.allCases {
+            #expect(Templates.sheets.contains { $0.category == category })
+        }
+        for template in Templates.sheets {
+            #expect(!Templates.render(template.body, title: "T").contains("{{"))
+        }
+    }
+}

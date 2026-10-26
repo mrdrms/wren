@@ -160,6 +160,12 @@ struct WrenCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .option])
             Button("Toggle Inspector") { model.showInspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
+            Divider()
+            Button(model.companion == nil ? "Open Second Editor" : "Close Second Editor") { model.toggleCompanion() }
+                .keyboardShortcut("3", modifiers: [.command, .option])
+                .disabled(model.loadedURL == nil)
+            Button("Swap Editors") { model.swapEditors() }
+                .disabled(model.companion == nil)
         }
     }
 }

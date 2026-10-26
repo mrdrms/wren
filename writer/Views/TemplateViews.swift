@@ -9,7 +9,7 @@ struct TemplateGallery: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var showProjects = false
-    @State private var sheetChoice = Templates.blogPost.id
+    @State private var sheetChoice = Templates.chapter.id
     @State private var projectChoice = Templates.projects[0].id
     @State private var title = ""
     @State private var author = NSFullUserName()
@@ -48,9 +48,19 @@ struct TemplateGallery: View {
                                 }
                             }
                         } else {
-                            ForEach(Templates.sheets) { template in
-                                card(name: template.name, symbol: template.symbol, tint: template.tint, summary: template.summary,
-                                     selected: sheetChoice == template.id) { sheetChoice = template.id }
+                            ForEach(TemplateCategory.allCases, id: \.self) { category in
+                                Section {
+                                    ForEach(Templates.sheets.filter { $0.category == category }) { template in
+                                        card(name: template.name, symbol: template.symbol, tint: template.tint, summary: template.summary,
+                                             selected: sheetChoice == template.id) { sheetChoice = template.id }
+                                    }
+                                } header: {
+                                    Text(category.rawValue)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.top, category == .general ? 0 : 8)
+                                }
                             }
                         }
                     }

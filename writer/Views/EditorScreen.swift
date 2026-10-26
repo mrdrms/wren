@@ -3,6 +3,7 @@ import SwiftUI
 struct EditorScreen: View {
     @Environment(AppModel.self) private var model
     @State private var hoveringHUD = false
+    @AppStorage("companionFraction") private var companionFraction = 0.42
 
     var body: some View {
         let prefs = model.prefs
@@ -12,16 +13,24 @@ struct EditorScreen: View {
                 .ignoresSafeArea()
 
             if model.loadedURL != nil {
-                HStack(spacing: 0) {
-                    writingColumn
-                        .opacity(model.previewMode == .full ? 0 : 1)
-                        .allowsHitTesting(model.previewMode != .full)
-                        .frame(maxWidth: model.previewMode == .full ? 0 : .infinity)
-                    if model.previewMode != .off {
-                        if model.previewMode == .split { Divider().ignoresSafeArea() }
-                        PreviewPane()
-                            .frame(maxWidth: .infinity)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                GeometryReader { proxy in
+                    HStack(spacing: 0) {
+                        writingColumn
+                            .opacity(model.previewMode == .full ? 0 : 1)
+                            .allowsHitTesting(model.previewMode != .full)
+                            .frame(maxWidth: model.previewMode == .full ? 0 : .infinity)
+                        if model.previewMode != .off {
+                            if model.previewMode == .split { Divider().ignoresSafeArea() }
+                            PreviewPane()
+                                .frame(maxWidth: .infinity)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        } else if let companion = model.companion, !model.zen, !model.boardMode {
+                            // The preview and the second editor share this side; the preview wins.
+                            CompanionDivider(fraction: $companionFraction, totalWidth: proxy.size.width)
+                            CompanionPane(sheet: companion)
+                                .frame(width: proxy.size.width * companionFraction)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
                     }
                 }
             } else {
