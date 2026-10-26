@@ -324,9 +324,11 @@ private struct SheetMenu: View {
             Button("Move Chapter Down") { model.moveChapter(sheet.url, by: 1) }
             Divider()
         }
-        Button("Open Beside") { model.openBeside(sheet.url) }
-            .disabled(sheet.url == model.loadedURL)
-        Divider()
+        // The sheet in the main editor can't also open beside it, so it isn't offered there.
+        if sheet.url != model.loadedURL {
+            Button("Open Beside") { model.openBeside(sheet.url) }
+            Divider()
+        }
         Button("Rename…") { model.beginRename(sheet.url) }
         Button("Duplicate") { model.duplicate(sheet.url) }
         Menu("Move To") {
