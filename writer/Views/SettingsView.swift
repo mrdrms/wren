@@ -20,15 +20,17 @@ private struct AppearanceSettings: View {
     var body: some View {
         @Bindable var prefs = model.prefs
         Form {
-            Section("Atmosphere") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 14) {
+            Section("Theme") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 14) {
                     ForEach(Theme.all) { theme in
                         AtmosphereCard(theme: theme, selected: prefs.themeID == theme.id)
                             .onTapGesture { withAnimation { prefs.themeID = theme.id } }
                     }
                 }
                 .padding(.vertical, 6)
-                Toggle("Animate the scene (petals, stars, fireflies…)", isOn: $prefs.ambient)
+                Toggle("Animate the scene (Starlight, Terminal)", isOn: $prefs.ambient)
+                Text("Off by default, so nothing moves while you write.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Typography") {
                 Picker("Font", selection: $prefs.font) {

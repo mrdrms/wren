@@ -86,7 +86,7 @@ final class Preferences {
             "typewriter": false,
             "styleLens": false,
             "keySounds": false,
-            "ambient": true,
+            "ambient": false,
             "autoTitle": true,
             "dailyGoal": 500,
             "flowLock": false,
@@ -105,7 +105,7 @@ final class Preferences {
             "pomodoroBreakScreen": true,
         ])
         let savedTheme = defaults.string(forKey: "themeID") ?? "paper"
-        themeID = savedTheme == "sepia" ? "terminal" : savedTheme // Candlelight became Terminal
+        themeID = Theme.named(savedTheme).id // retired themes land on their closest successor
         font = EditorFontChoice(rawValue: defaults.string(forKey: "font") ?? "") ?? .serif
         fontSize = defaults.double(forKey: "fontSize")
         lineWidth = defaults.double(forKey: "lineWidth")

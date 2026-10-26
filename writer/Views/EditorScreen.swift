@@ -131,7 +131,7 @@ struct AtmospherePicker: View {
     var body: some View {
         @Bindable var prefs = model.prefs
         VStack(alignment: .leading, spacing: 14) {
-            Text("Choose your atmosphere")
+            Text("Choose a theme")
                 .font(.system(.title3, design: .serif).weight(.semibold))
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(168), spacing: 12), count: 4), spacing: 12) {
                 ForEach(Theme.all) { theme in
