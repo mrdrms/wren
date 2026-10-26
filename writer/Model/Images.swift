@@ -15,7 +15,7 @@ enum MediaKind: Equatable {
 }
 
 /// Markdown image syntax helpers. Videos use the same `![caption](clip.mp4)` form.
-enum MarkdownImage {
+nonisolated enum MarkdownImage {
     static let videoExtensions: Set<String> = ["mp4", "mov", "m4v", "webm"]
 
     static func kind(of path: String) -> MediaKind {
@@ -72,7 +72,7 @@ enum MarkdownImage {
 }
 
 /// YAML front matter (`---` … `---` at the very top), the metadata block static-site generators use.
-enum FrontMatter {
+nonisolated enum FrontMatter {
     static func range(in text: String) -> NSRange? {
         guard text.hasPrefix("---\n") || text.hasPrefix("---\r\n") else { return nil }
         let ns = text as NSString

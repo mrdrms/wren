@@ -3,7 +3,7 @@ import Foundation
 
 /// The words a reader actually sees: Markdown symbols, link addresses, images, front matter,
 /// struck text and margin notes removed. Every count in Wren is based on this.
-enum MarkdownText {
+nonisolated enum MarkdownText {
     private static func rule(_ pattern: String, _ template: String) -> (NSRegularExpression, String) {
         (try! NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]), template)
     }
@@ -35,7 +35,7 @@ enum MarkdownText {
     }
 }
 
-struct TextStats: Equatable {
+nonisolated struct TextStats: Equatable, Sendable {
     var words = 0
     /// Letters, digits, punctuation and spaces; line breaks don't count.
     var characters = 0
@@ -134,7 +134,7 @@ struct TextStats: Equatable {
     }
 }
 
-struct Heading: Identifiable, Equatable {
+nonisolated struct Heading: Identifiable, Equatable, Sendable {
     let id: Int // character offset of the heading line
     let level: Int
     let title: String
@@ -159,7 +159,7 @@ struct Heading: Identifiable, Equatable {
 }
 
 /// Highlights habits that weaken prose: adverbs, filler words, passive voice, repeats and echoes.
-enum StyleLens {
+nonisolated enum StyleLens {
     enum Kind: String, CaseIterable, Identifiable {
         case adverb, filler, passive, repeated, echo
         var id: String { rawValue }
@@ -192,7 +192,7 @@ enum StyleLens {
         }
     }
 
-    struct Match: Equatable {
+    struct Match: Equatable, Sendable {
         let range: NSRange
         let kind: Kind
     }
@@ -263,7 +263,7 @@ enum StyleLens {
 
 /// Sentence lengths, for the Rhythm gutter and chart. Varied lengths read like music;
 /// uniform lengths read like a drone.
-enum Rhythm {
+nonisolated enum Rhythm {
     enum Bucket: Int, CaseIterable {
         case short, medium, long, veryLong
         init(words: Int) {
@@ -316,5 +316,27 @@ enum Rhythm {
         let mean = Double(lengths.reduce(0, +)) / Double(lengths.count)
         let variance = lengths.reduce(0) { $0 + pow(Double($1) - mean, 2) } / Double(lengths.count)
         return min(100, Int((variance.squareRoot() / mean) * 160))
+    }
+}
+
+/// Everything derived from a sheet's text, computed in one pass so it can run off the main thread.
+nonisolated struct DocumentAnalysis: Sendable {
+    let stats: TextStats
+    let headings: [Heading]
+    let lensMatches: [StyleLens.Match]
+    let notes: [DraftNote]
+    let ghostCount: Int
+    let sentenceLengths: [Int]
+
+    init(_ text: String) {
+        // Struck text and margin notes don't count toward goals or statistics.
+        var readable = MarkdownImage.stripForCounting(FrontMatter.strip(text))
+        if readable.contains("{") { readable = Ghost.clean(readable) }
+        stats = TextStats.forContent(text)
+        headings = Heading.parse(text)
+        lensMatches = StyleLens.analyze(text)
+        notes = DraftNote.parse(text)
+        ghostCount = Ghost.count(text)
+        sentenceLengths = Rhythm.sentenceLengths(readable)
     }
 }

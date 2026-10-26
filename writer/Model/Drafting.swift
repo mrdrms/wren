@@ -3,7 +3,7 @@ import Foundation
 /// Flow Lock: instead of deleting, finished words are struck through as CriticMarkup
 /// deletions (`{--like this--}`), so you keep moving forward and decide later.
 /// The file stays plain text that other CriticMarkup-aware tools understand.
-enum Ghost {
+nonisolated enum Ghost {
     static let open = "{--"
     static let close = "--}"
 
@@ -112,7 +112,7 @@ enum Ghost {
 }
 
 /// Margin notes (`{>>like this<<}`) and TK placeholders: things to come back to.
-struct DraftNote: Identifiable, Equatable {
+nonisolated struct DraftNote: Identifiable, Equatable, Sendable {
     enum Kind { case note, tk }
     var id: Int { range.location }
     let kind: Kind

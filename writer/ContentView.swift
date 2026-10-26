@@ -6,33 +6,38 @@ struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var escapeMonitor: Any?
     @State private var sceneFrame: CGRect = .zero
+    /// The sidebar as it was before Zen or a full preview folded it away.
+    @State private var columnsBeforeImmersive: NavigationSplitViewVisibility?
 
     var body: some View {
         @Bindable var model = model
         let theme = model.prefs.theme
         ZStack {
-            // Navigator and page; the inspector joins only when asked for.
+            // Navigator and page; the inspector joins only when asked for. Zen and preview-alone
+            // fold the sidebar away rather than layering a second editor screen on top, so
+            // there is only ever one page and nothing is left behind when they end.
             NavigationSplitView(columnVisibility: $model.columnVisibility) {
                 NavigatorView()
             } detail: {
-                detail(theme)
-            }
-            // Zen and preview-alone: the page takes over the window. The split view stays
-            // as it was underneath, so leaving brings everything back exactly.
-            if model.isImmersive {
                 EditorScreen()
-                    .transition(.opacity)
             }
         }
-        .animation(.smooth(duration: 0.3), value: model.isImmersive)
+        .onChange(of: model.isImmersive) { _, immersive in
+            withAnimation(.smooth(duration: 0.3)) {
+                if immersive {
+                    columnsBeforeImmersive = model.columnVisibility
+                    model.columnVisibility = .detailOnly
+                } else if let previous = columnsBeforeImmersive {
+                    if model.columnVisibility == .detailOnly { model.columnVisibility = previous }
+                    columnsBeforeImmersive = nil
+                }
+            }
+        }
         .background {
             // Measure the whole window once; panels draw their slice of one scene.
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { sceneFrame = proxy.frame(in: .global) }
-                    .onChange(of: proxy.frame(in: .global)) { sceneFrame = proxy.frame(in: .global) }
-            }
-            .ignoresSafeArea()
+            Color.clear
+                .ignoresSafeArea()
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sceneFrame = $0 }
         }
         .environment(\.sceneFrame, sceneFrame)
         .inspector(isPresented: $model.showInspector) {
@@ -120,15 +125,6 @@ struct ContentView: View {
                       event.window?.sheetParent == nil, model.handleEscape() else { return event }
                 return nil
             }
-        }
-    }
-
-    @ViewBuilder
-    private func detail(_ theme: Theme) -> some View {
-        if model.isImmersive {
-            AtmosphereView(theme: theme, animated: false).ignoresSafeArea()
-        } else {
-            EditorScreen()
         }
     }
 }

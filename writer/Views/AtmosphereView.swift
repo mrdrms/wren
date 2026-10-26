@@ -25,9 +25,11 @@ struct AtmosphereView: View {
         if continuous && sceneFrame.width > 0 {
             GeometryReader { proxy in
                 let frame = proxy.frame(in: .global)
+                // Never leave part of this view unpainted, even if the window measurement lags.
+                let whole = sceneFrame.union(frame)
                 scene
-                    .frame(width: sceneFrame.width, height: sceneFrame.height)
-                    .offset(x: sceneFrame.minX - frame.minX, y: sceneFrame.minY - frame.minY)
+                    .frame(width: whole.width, height: whole.height)
+                    .offset(x: whole.minX - frame.minX, y: whole.minY - frame.minY)
             }
             .clipped()
             .allowsHitTesting(false)

@@ -203,6 +203,8 @@ final class AppModel {
     @ObservationIgnored private var wordsAtOpen = 0
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var typingTask: Task<Void, Never>?
+    @ObservationIgnored private var analysisTask: Task<Void, Never>?
+    @ObservationIgnored private var editGeneration = 0
     @ObservationIgnored private var dirty = false
     @ObservationIgnored private var goalCelebrated = false
     /// The live editor, kept so it can move between the split view and the immersive layer.
@@ -249,9 +251,13 @@ final class AppModel {
         }
     }
 
-    var currentTitle: String {
-        guard let url = loadedURL else { return "Wren" }
-        return LibraryStore.titleAndPreview(text: text, fallback: url.deletingPathExtension().lastPathComponent).0
+    /// Stored rather than computed: deriving it reads the whole sheet, and the window title
+    /// would otherwise redraw the editor screen on every keystroke.
+    private(set) var currentTitle = "Wren"
+
+    private func refreshTitle() {
+        let title = loadedURL.map { LibraryStore.titleAndPreview(text: text, fallback: $0.deletingPathExtension().lastPathComponent).0 } ?? "Wren"
+        if title != currentTitle { currentTitle = title }
     }
 
     // MARK: Opening & saving
@@ -269,7 +275,8 @@ final class AppModel {
         loadToken += 1
         cuts = url.map { CuttingRoom.load(for: $0) } ?? []
         startHistory()
-        analyze()
+        analysisTask?.cancel()
+        apply(DocumentAnalysis(text))
         lastWordCount = stats.words
         wordsAtOpen = stats.words
         goalCelebrated = documentGoal.map { stats.words >= $0 } ?? false
@@ -281,19 +288,7 @@ final class AppModel {
         if isReading { stopReading() }
         text = newText
         dirty = true
-        analyze()
-
-        let delta = stats.words - lastWordCount
-        lastWordCount = stats.words
-        if delta > 0 {
-            // Cap per-edit credit so pasting a chapter doesn't count as writing it.
-            let credited = min(delta, 30)
-            let dailyBefore = log.today
-            log.add(credited)
-            momentum.record(credited)
-            checkDailyGoal(before: dailyBefore)
-        }
-        checkDocumentGoal()
+        scheduleAnalysis()
 
         isTyping = true
         typingTask?.cancel()
@@ -311,16 +306,46 @@ final class AppModel {
         }
     }
 
-    private func analyze() {
-        // Struck text and margin notes don't count toward goals or statistics.
-        var readable = MarkdownImage.stripForCounting(FrontMatter.strip(text))
-        if readable.contains("{") { readable = Ghost.clean(readable) }
-        stats = TextStats.forContent(text)
-        headings = Heading.parse(text)
-        lensMatches = StyleLens.analyze(text)
-        notes = DraftNote.parse(text)
-        ghostCount = Ghost.count(text)
-        sentenceLengths = Rhythm.sentenceLengths(readable)
+    /// Statistics, outline, lens and notes read the whole sheet: tens of milliseconds for a
+    /// long chapter. While typing they wait for a short pause and run off the main thread.
+    private func scheduleAnalysis() {
+        analysisTask?.cancel()
+        editGeneration += 1
+        let generation = editGeneration
+        let snapshot = text
+        analysisTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let result = await Task.detached(priority: .userInitiated) { DocumentAnalysis(snapshot) }.value
+            guard !Task.isCancelled, let self, self.editGeneration == generation else { return }
+            self.apply(result)
+            self.creditNewWords()
+        }
+    }
+
+    /// Only assigns what changed, so views watching one result don't redraw for the others.
+    private func apply(_ analysis: DocumentAnalysis) {
+        if stats != analysis.stats { stats = analysis.stats }
+        if headings != analysis.headings { headings = analysis.headings }
+        if lensMatches != analysis.lensMatches { lensMatches = analysis.lensMatches }
+        if notes != analysis.notes { notes = analysis.notes }
+        if ghostCount != analysis.ghostCount { ghostCount = analysis.ghostCount }
+        if sentenceLengths != analysis.sentenceLengths { sentenceLengths = analysis.sentenceLengths }
+        refreshTitle()
+    }
+
+    private func creditNewWords() {
+        let delta = stats.words - lastWordCount
+        lastWordCount = stats.words
+        if delta > 0 {
+            // Cap per-pause credit so pasting a chapter doesn't count as writing it.
+            let credited = min(delta, 30)
+            let dailyBefore = log.today
+            log.add(credited)
+            momentum.record(credited)
+            checkDailyGoal(before: dailyBefore)
+        }
+        checkDocumentGoal()
     }
 
     func saveNow() {
@@ -362,6 +387,7 @@ final class AppModel {
         if loadedURL == old {
             loadedURL = new
             selectedSheet = new
+            refreshTitle()
         }
         if companion?.url == old { companion?.moved(to: new) }
         if previousURL == old { previousURL = new }
