@@ -380,20 +380,46 @@ final class AppModel {
         moveDocumentIdentity(from: url, to: newURL)
     }
 
+    /// Where `url` ends up when `old` (the file itself, or a folder holding it) moves to `new`.
+    static func relocated(_ url: URL, from old: URL, to new: URL) -> URL? {
+        let path = url.standardizedFileURL.path, oldPath = old.standardizedFileURL.path
+        if path == oldPath { return new }
+        guard path.hasPrefix(oldPath + "/") else { return nil }
+        return new.appendingPathComponent(String(path.dropFirst(oldPath.count + 1)))
+    }
+
+    /// Whether `url` is `container` or lies inside it.
+    private func isWithin(_ url: URL?, _ container: URL) -> Bool {
+        url.map { Self.relocated($0, from: container, to: container) != nil } ?? false
+    }
+
+    /// A sheet, or a folder of sheets, was renamed or moved: the open sheets, their history
+    /// and goals follow it.
     private func moveDocumentIdentity(from old: URL, to new: URL) {
-        SnapshotStore.move(from: old, to: new)
-        HistoryStore.move(from: old, to: new)
-        CuttingRoom.move(from: old, to: new)
+        var followed: [(URL, URL)] = [(old, new)]
+        for url in [loadedURL, companion?.url].compactMap({ $0 }) where url != old {
+            if let moved = Self.relocated(url, from: old, to: new) { followed.append((url, moved)) }
+        }
+        for (from, to) in followed {
+            SnapshotStore.move(from: from, to: to)
+            HistoryStore.move(from: from, to: to)
+            CuttingRoom.move(from: from, to: to)
+        }
         var goals = documentGoals
-        if let goal = goals.removeValue(forKey: old.path) { goals[new.path] = goal }
+        for (key, goal) in goals {
+            if let moved = Self.relocated(URL(fileURLWithPath: key), from: old, to: new) {
+                goals.removeValue(forKey: key)
+                goals[moved.path] = goal
+            }
+        }
         documentGoals = goals
-        if loadedURL == old {
-            loadedURL = new
-            selectedSheet = new
+        if let loaded = loadedURL, let moved = Self.relocated(loaded, from: old, to: new) {
+            loadedURL = moved
+            selectedSheet = moved
             refreshTitle()
         }
-        if companion?.url == old { companion?.moved(to: new) }
-        if previousURL == old { previousURL = new }
+        if let companion, let moved = Self.relocated(companion.url, from: old, to: new) { companion.moved(to: moved) }
+        if let previous = previousURL, let moved = Self.relocated(previous, from: old, to: new) { previousURL = moved }
     }
 
     // MARK: Second editor
@@ -473,7 +499,7 @@ final class AppModel {
             if case .recent = sidebarSelection {} else if case .folder = sidebarSelection {} else { sidebarSelection = .all }
             searchText = ""
             selectedSheet = url
-            if zen == false && columnVisibility == .detailOnly { columnVisibility = .all }
+            if !isImmersive && columnVisibility == .detailOnly { columnVisibility = .all }
             DispatchQueue.main.async { [weak self] in self?.editor?.window?.makeFirstResponder(self?.editor) }
         } catch {
             showToast("Couldn't create sheet", symbol: "exclamationmark.triangle.fill")
@@ -611,7 +637,7 @@ final class AppModel {
     func commitRename() {
         guard let url = renameTarget else { return }
         renameTarget = nil
-        if url == loadedURL { saveNow() }
+        if isWithin(loadedURL, url) || isWithin(companion?.url, url) { saveNow() }
         var newName = renameText
         // Chapters keep their place in the book even if the number was removed while renaming.
         if library.projects[url.deletingLastPathComponent()]?.kind == .book, let number = Chapters.number(of: url),
@@ -633,7 +659,7 @@ final class AppModel {
             companion.saveNow()
             self.companion = nil
         }
-        if url == loadedURL {
+        if isWithin(loadedURL, url) {
             saveNow()
             dirty = false
             selectedSheet = nil
@@ -647,8 +673,8 @@ final class AppModel {
     }
 
     func move(_ url: URL, to folder: URL) {
-        if url == loadedURL { saveNow() }
-        guard let newURL = try? library.move(url, to: folder) else { return }
+        if isWithin(loadedURL, url) || isWithin(companion?.url, url) { saveNow() }
+        guard let newURL = try? library.move(url, to: folder), newURL != url else { return }
         moveDocumentIdentity(from: url, to: newURL)
     }
 

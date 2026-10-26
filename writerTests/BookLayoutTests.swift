@@ -45,3 +45,52 @@ struct BookLayoutTests {
         }
     }
 }
+
+@MainActor
+struct FileSafetyTests {
+    private func tempFolder() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wren-files-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test func openSheetsFollowTheirFolder() {
+        let old = URL(fileURLWithPath: "/lib/Book")
+        let new = URL(fileURLWithPath: "/lib/Novel")
+        #expect(AppModel.relocated(URL(fileURLWithPath: "/lib/Book/01 One.md"), from: old, to: new)?.path == "/lib/Novel/01 One.md")
+        #expect(AppModel.relocated(URL(fileURLWithPath: "/lib/Book/Notes/Outline.md"), from: old, to: new)?.path == "/lib/Novel/Notes/Outline.md")
+        #expect(AppModel.relocated(old, from: old, to: new) == new)
+        // A sibling whose name merely starts the same is not inside the folder.
+        #expect(AppModel.relocated(URL(fileURLWithPath: "/lib/Book 2/x.md"), from: old, to: new) == nil)
+    }
+
+    @Test func movingToTheSameFolderOrRecasingKeepsTheName() throws {
+        let folder = try tempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let library = LibraryStore()
+        let sheet = folder.appendingPathComponent("chapter one.md")
+        try "text".write(to: sheet, atomically: true, encoding: .utf8)
+
+        #expect(try library.move(sheet, to: folder) == sheet)
+        let renamed = try library.rename(sheet, to: "Chapter One")
+        #expect(renamed.lastPathComponent == "Chapter One.md")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == ["Chapter One.md"])
+    }
+
+    @Test func failedRenumberLeavesNoChapterHidden() throws {
+        let folder = try tempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let library = LibraryStore()
+        let one = folder.appendingPathComponent("01 One.md")
+        let two = folder.appendingPathComponent("02 Two.md")
+        try "1".write(to: one, atomically: true, encoding: .utf8)
+        try "2".write(to: two, atomically: true, encoding: .utf8)
+        // A folder squatting on a final name makes the second pass fail.
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("01 Two.md"), withIntermediateDirectories: false)
+
+        #expect(throws: (any Error).self) { try library.renumberChapters([two, one]) }
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(!names.contains { $0.hasPrefix(".wren-renumber") })
+        #expect(names.contains("01 One.md") && names.contains("02 Two.md"))
+    }
+}

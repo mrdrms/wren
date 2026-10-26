@@ -145,6 +145,11 @@ final class BookTypesetter {
         settings.trim.size.width - 108 * settings.trim.size.width / 432
     }
 
+    /// The height text gets on a page, so nothing taller (an image) can stall pagination.
+    static func textHeight(for settings: BookSettings) -> CGFloat {
+        settings.trim.size.height - 120 * settings.trim.size.width / 432
+    }
+
     // MARK: Drawing
 
     /// Draws one page into the current graphics context, which must be flipped.
@@ -164,7 +169,8 @@ final class BookTypesetter {
             layout.drawGlyphs(forGlyphRange: range, at: textOrigin(recto: page.isRecto))
             guard !opensChapter else { return }
             if settings.runningHeads {
-                let head = page.isRecto || !settings.twoSided ? chapterTitles[chapter] : title
+                let chapterTitle = chapterTitles[chapter]
+                let head = (page.isRecto || !settings.twoSided) && !chapterTitle.isEmpty ? chapterTitle : title
                 drawCentered(head.uppercased(), font: typography.small, color: .darkGray, kern: 1.2, y: top * 0.45, recto: page.isRecto)
             }
             if settings.pageNumbers {

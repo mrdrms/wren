@@ -177,7 +177,11 @@ final class LibraryStore {
         let ext = isDirectory ? nil : (url.pathExtension.isEmpty ? "md" : url.pathExtension)
         let current = isDirectory ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
         guard clean != current else { return url }
-        let target = uniqueURL(in: url.deletingLastPathComponent(), base: clean, ext: ext)
+        // Only the capitalization changes: the file system sees the same name, so don't let
+        // uniqueURL turn it into "Name 2".
+        let target = clean.lowercased() == current.lowercased()
+            ? url.deletingLastPathComponent().appendingPathComponent(ext.map { "\(clean).\($0)" } ?? clean, isDirectory: isDirectory)
+            : uniqueURL(in: url.deletingLastPathComponent(), base: clean, ext: ext)
         try fm.moveItem(at: url, to: target)
         refresh()
         return target
@@ -197,6 +201,8 @@ final class LibraryStore {
     }
 
     func move(_ url: URL, to folder: URL) throws -> URL {
+        // Dropped where it already is: nothing to do (and no "Name 2" copy of its name).
+        guard url.deletingLastPathComponent().standardizedFileURL != folder.standardizedFileURL else { return url }
         let target = uniqueURL(in: folder, base: url.deletingPathExtension().lastPathComponent, ext: url.pathExtension)
         try fm.moveItem(at: url, to: target)
         refresh()
@@ -273,12 +279,27 @@ final class LibraryStore {
                 .appendingPathComponent(Chapters.fileName(number: index + 1, base: Chapters.baseName(of: url), ext: url.pathExtension.isEmpty ? "md" : url.pathExtension))
             guard final != url else { continue }
             let temp = url.deletingLastPathComponent().appendingPathComponent(".wren-renumber-\(UUID().uuidString).md")
-            try fm.moveItem(at: url, to: temp)
+            do {
+                try fm.moveItem(at: url, to: temp)
+            } catch {
+                for item in staged { try? fm.moveItem(at: item.temp, to: item.original) }
+                throw error
+            }
             staged.append((temp, final, url))
         }
-        for item in staged {
-            try fm.moveItem(at: item.temp, to: item.final)
-            moves[item.original] = item.final
+        do {
+            for item in staged {
+                try fm.moveItem(at: item.temp, to: item.final)
+                moves[item.original] = item.final
+            }
+        } catch {
+            // Put back anything still parked under a hidden temporary name, so no chapter
+            // disappears from the book.
+            for item in staged where fm.fileExists(atPath: item.temp.path) {
+                try? fm.moveItem(at: item.temp, to: item.original)
+            }
+            refresh()
+            throw error
         }
         refresh()
         return moves

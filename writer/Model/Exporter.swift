@@ -355,10 +355,12 @@ enum Exporter {
     private static let sheetLayout = BookSettings(trim: .a4, twoSided: false, chaptersOnRight: false, titlePage: false,
                                                   pageNumbers: true, runningHeads: false)
 
-    /// HTML → attributed text, with oversized images shrunk to the page width.
+    /// HTML → attributed text, with oversized images shrunk to fit the page.
     private static func attributed(html: String) -> NSMutableAttributedString? {
         guard let data = html.data(using: .utf8), let imported = NSAttributedString(html: data, documentAttributes: nil) else { return nil }
         let width = BookTypesetter.textWidth(for: sheetLayout)
+        // A little under the full height: the line an image sits on needs some room too.
+        let height = BookTypesetter.textHeight(for: sheetLayout) * 0.9
         let attributed = NSMutableAttributedString(attributedString: imported)
         attributed.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
             guard let attachment = value as? NSTextAttachment else { return }
@@ -368,8 +370,10 @@ enum Exporter {
                     ?? attachment.fileWrapper?.regularFileContents.flatMap { NSImage(data: $0)?.size }
                     ?? .zero
             }
-            guard size.width > width else { return }
-            attachment.bounds = CGRect(x: 0, y: 0, width: width, height: size.height * width / size.width)
+            guard size.width > 0, size.height > 0 else { return }
+            let fit = min(1, width / size.width, height / size.height)
+            guard fit < 1 else { return }
+            attachment.bounds = CGRect(x: 0, y: 0, width: size.width * fit, height: size.height * fit)
         }
         return attributed
     }

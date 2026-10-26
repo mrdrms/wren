@@ -183,8 +183,13 @@ struct MarkdownEditor: NSViewRepresentable {
             }
         }
 
-        func jump(to range: NSRange) {
+        func jump(to requested: NSRange) {
             guard let textView else { return }
+            // Outline and note ranges come from the last analysis, which trails typing by a
+            // moment: after a deletion they can point past the end.
+            let length = (textView.string as NSString).length
+            let location = min(max(0, requested.location), length)
+            let range = NSRange(location: location, length: min(max(0, requested.length), length - location))
             textView.window?.makeFirstResponder(textView)
             textView.setSelectedRange(range)
             if model.prefs.typewriter {

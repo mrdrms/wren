@@ -331,10 +331,10 @@ struct CompileSheet: View {
             if let saved = model.library.projects[folder]?.layout { layout = saved }
             chapterText = model.printableChapters(folder)
         }
-        .task(id: TypesetKey(layout: layout, titlePage: titlePage, chapters: chapterText.count)) {
+        .task(id: TypesetKey(layout: layout, titlePage: titlePage, chapters: chapterText.count, format: format)) {
             // Let settings settle (stepper clicks, toggles) before laying out the whole book.
             try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled, !chapterText.isEmpty else { return }
+            guard !Task.isCancelled, !chapterText.isEmpty, format == .pdf else { return }
             var settings = layout
             settings.titlePage = titlePage
             let info = model.library.projects[folder]
@@ -346,6 +346,7 @@ struct CompileSheet: View {
         let layout: BookSettings
         let titlePage: Bool
         let chapters: Int
+        let format: Exporter.CompileFormat
     }
 }
 

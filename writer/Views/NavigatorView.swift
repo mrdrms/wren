@@ -221,7 +221,8 @@ private struct SheetsPage: View {
             .padding(.top, 8)
             .padding(.bottom, 8)
 
-            List(selection: $model.selectedSheet) {
+            // Clicking empty space in a list deselects; that mustn't close the sheet you're in.
+            List(selection: Binding(get: { model.selectedSheet }, set: { if let url = $0 { model.selectedSheet = url } })) {
                 if case .folder(let folder) = model.sidebarSelection, let info = model.library.projects[folder], model.searchText.isEmpty {
                     ProjectHeader(folder: folder, info: info)
                         .listRowSeparator(.hidden)
