@@ -51,6 +51,11 @@ struct WrenCommands: Commands {
             Button("Export for Blog…") { model.export("blog") }
                 .keyboardShortcut("e", modifiers: [.command, .option])
             Button("Copy as HTML") { model.export("copy") }
+            Button("Copy for Substack or Medium") { model.export("rich") }
+                .keyboardShortcut("c", modifiers: [.command, .shift, .option])
+            Button("Publish…") { model.beginPublish() }
+                .keyboardShortcut("p", modifiers: [.command, .control])
+                .disabled(model.loadedURL == nil)
             Divider()
             Button("Check for Secrets…") { model.checkForSecrets() }
                 .keyboardShortcut("c", modifiers: [.command, .option])
@@ -144,6 +149,17 @@ struct WrenCommands: Commands {
                 Button("Stop Pomodoro") { model.stopPomodoro() }
                     .disabled(!model.pomodoro.isActive)
             }
+            Menu("AI Editor") {
+                Button("Line Edit Selection") { model.aiLineEdit() }
+                    .keyboardShortcut("e", modifiers: [.command, .control])
+                Button("Editor's Read") { model.aiCritique() }
+                Button("Title Ideas") { model.aiTitles() }
+                Button("Write Alt Text") { model.aiAltText() }
+                Divider()
+                Button("Check Book Continuity") { model.aiContinuity() }.disabled(model.currentBook == nil)
+                Button("Draft Book Synopsis") { model.aiSynopsis() }.disabled(model.currentBook == nil)
+            }
+            .disabled(model.loadedURL == nil)
             Button("Writing Journey") { model.showJourney = true }
                 .keyboardShortcut("j", modifiers: [.command, .shift])
             Divider()

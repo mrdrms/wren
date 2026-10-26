@@ -66,6 +66,19 @@ final class Preferences {
     var showFormatBar: Bool { didSet { defaults.set(showFormatBar, forKey: "showFormatBar") } }
     /// Fade the format bar and status pill while typing; moving the pointer brings them back.
     var minimalWhileTyping: Bool { didSet { defaults.set(minimalWhileTyping, forKey: "minimalWhileTyping") } }
+    /// Blogs you publish to. Their keys live in the Keychain, not here.
+    var publishAccounts: [PublishAccount] {
+        didSet { defaults.set(try? JSONEncoder().encode(publishAccounts), forKey: "publishAccounts") }
+    }
+    /// AI is off until you turn it on and add a key.
+    var aiEnabled: Bool { didSet { defaults.set(aiEnabled, forKey: "aiEnabled") } }
+    var aiProvider: AIProvider { didSet { defaults.set(aiProvider.rawValue, forKey: "aiProvider") } }
+    /// The model chosen for each provider.
+    var aiModels: [String: String] { didSet { defaults.set(aiModels, forKey: "aiModels") } }
+    /// Show exactly what will be sent, and ask, before every AI request.
+    var aiConfirmRequests: Bool { didSet { defaults.set(aiConfirmRequests, forKey: "aiConfirmRequests") } }
+
+    var aiModel: String { aiModels[aiProvider.rawValue] ?? aiProvider.defaultModel }
     var pomodoroEnabled: Bool { didSet { defaults.set(pomodoroEnabled, forKey: "pomodoroEnabled") } }
     var pomodoroWork: Int { didSet { defaults.set(pomodoroWork, forKey: "pomodoroWork") } }
     var pomodoroShortBreak: Int { didSet { defaults.set(pomodoroShortBreak, forKey: "pomodoroShortBreak") } }
@@ -98,6 +111,8 @@ final class Preferences {
             "hideMarkup": false,
             "showFormatBar": true,
             "minimalWhileTyping": true,
+            "aiEnabled": false,
+            "aiConfirmRequests": true,
             "pomodoroEnabled": false,
             "pomodoroWork": 25,
             "pomodoroShortBreak": 5,
@@ -128,6 +143,11 @@ final class Preferences {
         hideMarkup = defaults.bool(forKey: "hideMarkup")
         showFormatBar = defaults.bool(forKey: "showFormatBar")
         minimalWhileTyping = defaults.bool(forKey: "minimalWhileTyping")
+        publishAccounts = (defaults.data(forKey: "publishAccounts")).flatMap { try? JSONDecoder().decode([PublishAccount].self, from: $0) } ?? []
+        aiEnabled = defaults.bool(forKey: "aiEnabled")
+        aiProvider = AIProvider(rawValue: defaults.string(forKey: "aiProvider") ?? "") ?? .anthropic
+        aiModels = defaults.dictionary(forKey: "aiModels") as? [String: String] ?? [:]
+        aiConfirmRequests = defaults.bool(forKey: "aiConfirmRequests")
         pomodoroEnabled = defaults.bool(forKey: "pomodoroEnabled")
         pomodoroWork = defaults.integer(forKey: "pomodoroWork")
         pomodoroShortBreak = defaults.integer(forKey: "pomodoroShortBreak")

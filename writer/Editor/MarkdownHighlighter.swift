@@ -150,6 +150,15 @@ final class MarkdownHighlighter {
                     markup(NSRange(location: NSMaxRange(m.range) - 3, length: 3))
                 }
             }
+            // Footnotes: references sit small and raised; a note's label is quiet.
+            each(Footnotes.reference) { m in
+                storage.addAttributes([.foregroundColor: theme.accent, .font: font(size: fontSize * 0.7),
+                                       .baselineOffset: fontSize * 0.3], range: m.range)
+            }
+            each(Footnotes.definition) { m in
+                storage.addAttributes([.foregroundColor: muted, .font: font(size: fontSize * 0.85)],
+                                      range: NSRange(location: m.range.location, length: m.range(at: 2).location - m.range.location))
+            }
             each(Self.tk) { m in
                 storage.addAttributes([.foregroundColor: NSColor.white, .backgroundColor: NSColor(hex: 0xE5484D),
                                        .font: font(size: fontSize * 0.85, bold: true)], range: m.range)

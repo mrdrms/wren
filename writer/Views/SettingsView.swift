@@ -8,6 +8,8 @@ struct SettingsView: View {
             Tab("Appearance", systemImage: "paintpalette") { AppearanceSettings() }
             Tab("Writing", systemImage: "pencil.and.outline") { WritingSettings() }
             Tab("Focus", systemImage: "timer") { FocusSettings() }
+            Tab("Publishing", systemImage: "paperplane") { PublishingSettings() }
+            Tab("AI", systemImage: "sparkle") { AISettings() }
         }
         .frame(width: 560)
         .preferredColorScheme(model.prefs.theme.colorScheme)

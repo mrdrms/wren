@@ -6,9 +6,15 @@ import UniformTypeIdentifiers
 import UserNotifications
 
 enum InspectorTab: String, CaseIterable, Identifiable {
-    case goals, outline, style, stats, history, cuts
+    case goals, outline, style, stats, history, cuts, ai
     var id: String { rawValue }
-    var label: String { self == .cuts ? "Cutting Room" : rawValue.capitalized }
+    var label: String {
+        switch self {
+        case .cuts: "Cutting Room"
+        case .ai: "AI Editor"
+        default: rawValue.capitalized
+        }
+    }
     var symbol: String {
         switch self {
         case .goals: "target"
@@ -17,6 +23,7 @@ enum InspectorTab: String, CaseIterable, Identifiable {
         case .stats: "chart.bar.xaxis"
         case .history: "clock.arrow.circlepath"
         case .cuts: "scissors"
+        case .ai: "sparkle"
         }
     }
 }
@@ -172,6 +179,14 @@ final class AppModel {
     var showTemplates = false
     /// The book folder being compiled, while the compile sheet is open.
     var compileFolder: URL?
+    /// The publish sheet is open.
+    var showPublish = false
+    /// An AI request waiting for you to see exactly what will be sent, and say yes.
+    var aiPending: AIPending?
+    /// What the AI is working on right now, for the inspector's progress line.
+    var aiBusy: String?
+    /// The AI editor's latest answer, shown in the inspector.
+    var aiResult: AIResult?
     var boardMode = false
     private(set) var previewMode: PreviewMode = .off
     /// Caret position as a fraction of the sheet, so the side-by-side preview can follow along.
@@ -1228,6 +1243,11 @@ final class AppModel {
             Exporter.copyHTML(markdown: Ghost.clean(text))
             showToast("HTML copied to clipboard", symbol: "doc.on.clipboard")
             return
+        case "rich":
+            let post = PreparedPost(text: text, fallbackTitle: currentTitle, folder: loadedURL?.deletingLastPathComponent())
+            Exporter.copyRich(post, folder: loadedURL?.deletingLastPathComponent())
+            showToast("Copied with formatting. Paste it into Substack or Medium; put the title in their title field.", symbol: "doc.on.clipboard")
+            return
         default: ok = Exporter.exportHTML(title: currentTitle, markdown: Ghost.clean(text), folder: loadedURL?.deletingLastPathComponent(), style: prefs.blogStyle)
         }
         if ok { showToast("Exported", symbol: "square.and.arrow.up") }
@@ -1237,7 +1257,7 @@ final class AppModel {
 
     /// Before anything leaves Wren, check it for keys, tokens and internal addresses.
     /// Returns whether to go ahead.
-    private func confirmNoSecrets(action: String) -> Bool {
+    func confirmNoSecrets(action: String) -> Bool {
         let findings = SecretScanner.scan(Ghost.clean(text))
         guard !findings.isEmpty else { return true }
         let alert = NSAlert()

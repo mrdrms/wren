@@ -268,7 +268,10 @@ struct BookTypography {
     }
 
     /// The chapter as print-ready text, plus its title (the first heading) for running heads.
-    func attributed(_ markdown: String) -> (NSAttributedString, String?) {
+    /// Footnotes are numbered in the text and collected as notes at the end of the chapter.
+    func attributed(_ source: String) -> (NSAttributedString, String?) {
+        let (markdown, notes) = Footnotes.extract(source)
+        let noteOrder = Footnotes.order(in: markdown, notes: notes)
         let output = NSMutableAttributedString()
         var chapterTitle: String?
         // The first paragraph after a heading or scene break isn't indented.
@@ -330,7 +333,33 @@ struct BookTypography {
                 indentNext = true
             }
         }
+        if !noteOrder.isEmpty {
+            numberFootnotes(in: output, order: noteOrder)
+            let heading = paragraph(indent: false, alignment: .left, before: fontSize * 2, after: fontSize * 0.4)
+            append(NSAttributedString(string: "Notes", attributes: [.font: font(size: fontSize * 0.9, bold: true), .paragraphStyle: heading]))
+            let noteStyle = paragraph(indent: false, alignment: .left, head: fontSize * 1.4)
+            let mutable = NSMutableParagraphStyle()
+            mutable.setParagraphStyle(noteStyle)
+            mutable.firstLineHeadIndent = 0
+            mutable.tabStops = [NSTextTab(textAlignment: .left, location: fontSize * 1.4)]
+            for (index, label) in noteOrder.enumerated() {
+                append(inline("\(index + 1).\t\(notes[label] ?? "")", size: fontSize * 0.85, style: mutable))
+            }
+        }
         return (output, chapterTitle)
+    }
+
+    /// Replaces `[^label]` with a small raised number.
+    private func numberFootnotes(in text: NSMutableAttributedString, order: [String]) {
+        let string = text.string
+        for match in Footnotes.reference.matches(in: string, range: NSRange(location: 0, length: (string as NSString).length)).reversed() {
+            let label = (string as NSString).substring(with: match.range(at: 1))
+            guard let index = order.firstIndex(of: label) else { continue }
+            var attributes = text.attributes(at: match.range.location, effectiveRange: nil)
+            attributes[.font] = font(size: fontSize * 0.65)
+            attributes[.baselineOffset] = fontSize * 0.35
+            text.replaceCharacters(in: match.range, with: NSAttributedString(string: "\(index + 1)", attributes: attributes))
+        }
     }
 
     /// Paragraph blocks, split on blank lines; fenced code lines come through one by one.

@@ -25,6 +25,7 @@ struct InspectorView: View {
                     case .stats: StatsPane()
                     case .history: HistoryPane()
                     case .cuts: CuttingRoomPane()
+                    case .ai: AIPane()
                     }
                 }
                 .padding(.horizontal, 16)

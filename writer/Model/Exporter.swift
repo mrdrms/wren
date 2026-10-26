@@ -9,7 +9,7 @@ enum MarkdownHTML {
     nonisolated(unsafe) static var videosAsLinks = false
 
     static func convert(_ markdown: String) -> String {
-        let markdown = FrontMatter.strip(markdown)
+        let (markdown, notes) = Footnotes.extract(FrontMatter.strip(markdown))
         var html: [String] = []
         var paragraph: [String] = []
         var listItems: [String] = []
@@ -77,7 +77,7 @@ enum MarkdownHTML {
         }
         if let block = code { html.append("<pre><code>\(escape(block.joined(separator: "\n")))</code></pre>") }
         flushAll()
-        return html.joined(separator: "\n")
+        return Footnotes.html(html.joined(separator: "\n"), notes: notes, inline: inline)
     }
 
     private static func headingLevel(_ line: String) -> Int? {
@@ -289,12 +289,13 @@ enum Exporter {
     // MARK: Books
 
     enum CompileFormat: String, CaseIterable, Identifiable {
-        case word, pdf, html, markdown
+        case word, pdf, epub, html, markdown
         var id: String { rawValue }
         var label: String {
             switch self {
             case .word: "Word (.docx)"
             case .pdf: "Print-ready PDF"
+            case .epub: "Ebook (EPUB)"
             case .html: "Web page (.html)"
             case .markdown: "Markdown (.md)"
             }
@@ -303,6 +304,7 @@ enum Exporter {
             switch self {
             case .word: UTType(filenameExtension: "docx") ?? .data
             case .pdf: .pdf
+            case .epub: UTType(filenameExtension: "epub") ?? .data
             case .html: .html
             case .markdown: UTType(filenameExtension: "md") ?? .plainText
             }
@@ -328,6 +330,8 @@ enum Exporter {
             let body = (titlePage ? titleHTML : "") + sections.joined(separator: "\n")
             let page = MarkdownHTML.document(title: title, body: body, style: style).replacingOccurrences(of: "</style>", with: bookCSS + "</style>")
             data = embedMedia(in: page, folder: folder).data(using: .utf8)
+        case .epub:
+            data = EPUBBuilder.build(title: title, author: byline, chapters: cleaned, titlePage: titlePage, folder: folder)
         case .pdf:
             // Typeset as a printed book: trim size, mirrored margins, chapters on new pages.
             var settings = layout
@@ -396,6 +400,22 @@ enum Exporter {
         guard let text = attributed(html: html) else { return nil }
         return try? text.data(from: NSRange(location: 0, length: text.length),
                               documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML])
+    }
+
+    /// The post as formatted text for editors that only take a paste (Substack, Medium):
+    /// headings, emphasis, links, lists and images come across. The title stays out, since
+    /// both have their own title field.
+    static func copyRich(_ post: PreparedPost, folder: URL?) {
+        let html = "<html><head><meta charset=\"utf-8\"></head><body>"
+            + embedMedia(in: MarkdownHTML.convert(post.markdown), folder: folder) + "</body></html>"
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(html, forType: .html)
+        if let data = html.data(using: .utf8), let attributed = NSAttributedString(html: data, documentAttributes: nil),
+           let rtf = try? attributed.data(from: NSRange(location: 0, length: attributed.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) {
+            pasteboard.setData(rtf, forType: .rtf)
+        }
+        pasteboard.setString(post.markdown, forType: .string)
     }
 
     static func copyHTML(markdown: String) {

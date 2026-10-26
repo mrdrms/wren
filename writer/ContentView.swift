@@ -93,6 +93,8 @@ struct ContentView: View {
         .sheet(isPresented: $model.showTimeMachine) { TimeMachineView() }
         .sheet(item: $model.linkDraft) { draft in LinkSheet(draft: draft) }
         .sheet(isPresented: $model.showTemplates) { TemplateGallery() }
+        .sheet(isPresented: $model.showPublish) { PublishSheet() }
+        .sheet(item: $model.aiPending) { pending in AIConfirmSheet(pending: pending) }
         .sheet(isPresented: Binding(get: { model.compileFolder != nil }, set: { if !$0 { model.compileFolder = nil } })) {
             if let folder = model.compileFolder { CompileSheet(folder: folder) }
         }
