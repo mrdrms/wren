@@ -255,47 +255,160 @@ struct ProjectHeader: View {
 struct CompileSheet: View {
     @Environment(AppModel.self) private var model
     let folder: URL
-    @State private var format = Exporter.CompileFormat.word
+    @State private var format = Exporter.CompileFormat.pdf
     @State private var titlePage = true
+    @State private var layout = BookSettings()
+    @State private var book: BookTypesetter?
+    @State private var chapterText: [String] = []
 
     var body: some View {
         let chapters = model.library.chapters(in: folder)
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Compile Manuscript", systemImage: "books.vertical.fill").font(.title2.weight(.bold))
-            Text("Joins every chapter, in order, into one document. Margin notes and struck text are left out.")
-                .foregroundStyle(.secondary)
-            Picker("Format", selection: $format) {
-                ForEach(Exporter.CompileFormat.allCases) { Text($0.label).tag($0) }
-            }
-            Toggle("Start with a title page", isOn: $titlePage)
-            GroupBox {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
-                            HStack {
-                                Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary)
-                                Text(chapter.title)
-                                Spacer()
-                                Text("\(chapter.words.formatted()) words").font(.caption).foregroundStyle(.secondary)
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Compile Book", systemImage: "books.vertical.fill").font(.title2.weight(.bold))
+                Text("Joins every chapter, in order. Margin notes and struck text are left out.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Form {
+                    Picker("Format", selection: $format) {
+                        ForEach(Exporter.CompileFormat.allCases) { Text($0.label).tag($0) }
+                    }
+                    Toggle("Title page", isOn: $titlePage)
+                    if format == .pdf {
+                        Section("Print layout") {
+                            Picker("Page size", selection: $layout.trim) {
+                                ForEach(TrimSize.allCases) { Text($0.label).tag($0) }
                             }
+                            Toggle("Two-sided (mirrored margins)", isOn: $layout.twoSided)
+                            Toggle("Chapters start on a right page", isOn: $layout.chaptersOnRight)
+                                .disabled(!layout.twoSided)
+                            Toggle("Page numbers", isOn: $layout.pageNumbers)
+                            Toggle("Running heads", isOn: $layout.runningHeads)
+                            Stepper("Text size: \(layout.fontSize.formatted()) pt", value: $layout.fontSize, in: 9...14, step: 0.5)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: 160)
-            }
-            HStack {
-                Text("Uses the \(model.prefs.blogStyle.label) style. Change it in the preview.").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel", role: .cancel) { model.compileFolder = nil }
-                    .keyboardShortcut(.cancelAction)
-                Button("Compile…") { model.compile(folder: folder, format: format, titlePage: titlePage) }
+                .formStyle(.grouped)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, -20)
+
+                Text("\(chapters.count) chapters · \(chapters.reduce(0) { $0 + $1.words }.formatted()) words\(book.map { " · \($0.pages.count) pages" } ?? "")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                HStack {
+                    Spacer()
+                    Button("Cancel", role: .cancel) { model.compileFolder = nil }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Compile…") {
+                        model.compile(folder: folder, format: format, titlePage: titlePage, layout: layout)
+                    }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.glassProminent)
                     .disabled(chapters.isEmpty)
+                }
             }
+            .padding(22)
+            .frame(width: 340)
+
+            Divider()
+
+            Group {
+                if format == .pdf, let book {
+                    BookSpreadsView(book: book)
+                } else if format == .pdf {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ContentUnavailableView("No page preview", systemImage: "doc.text",
+                                           description: Text("Pages only apply to the print-ready PDF. Word, web and Markdown reflow to fit."))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(white: 0.5).opacity(0.12))
         }
-        .padding(22)
-        .frame(width: 520)
+        .frame(width: 1020, height: 680)
+        .onAppear {
+            if let saved = model.library.projects[folder]?.layout { layout = saved }
+            chapterText = model.printableChapters(folder)
+        }
+        .task(id: TypesetKey(layout: layout, titlePage: titlePage, chapters: chapterText.count)) {
+            // Let settings settle (stepper clicks, toggles) before laying out the whole book.
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, !chapterText.isEmpty else { return }
+            var settings = layout
+            settings.titlePage = titlePage
+            let info = model.library.projects[folder]
+            book = BookTypesetter(title: model.bookTitle(folder), author: info?.author, chapters: chapterText, settings: settings)
+        }
+    }
+
+    private struct TypesetKey: Equatable {
+        let layout: BookSettings
+        let titlePage: Bool
+        let chapters: Int
+    }
+}
+
+/// The book as it will print: two-page spreads, the first page alone on the right like a
+/// real book.
+struct BookSpreadsView: View {
+    let book: BookTypesetter
+
+    var body: some View {
+        GeometryReader { proxy in
+            let pageSize = book.pageSize
+            // Two pages side by side, fitting the width with room to breathe.
+            let pageWidth = min((proxy.size.width - 64) / 2, (proxy.size.height - 80) * pageSize.width / pageSize.height)
+            let pageHeight = pageWidth * pageSize.height / pageSize.width
+            ScrollView {
+                LazyVStack(spacing: 28) {
+                    ForEach(spreads.indices, id: \.self) { index in
+                        let spread = spreads[index]
+                        HStack(spacing: 0) {
+                            pageView(spread.left, width: pageWidth, height: pageHeight, recto: false)
+                            pageView(spread.right, width: pageWidth, height: pageHeight, recto: true)
+                        }
+                        .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                    }
+                }
+                .padding(.vertical, 32)
+                .frame(maxWidth: .infinity)
+            }
+            .id(ObjectIdentifier(book))
+        }
+    }
+
+    private var spreads: [(left: BookTypesetter.Page?, right: BookTypesetter.Page?)] {
+        var result: [(BookTypesetter.Page?, BookTypesetter.Page?)] = []
+        var pages = book.pages[...]
+        // Page one is a right-hand page with nothing facing it.
+        if let first = pages.first, first.isRecto {
+            result.append((nil, first))
+            pages = pages.dropFirst()
+        }
+        while !pages.isEmpty {
+            let left = pages.popFirst()
+            let right = pages.popFirst()
+            result.append((left, right))
+        }
+        return result
+    }
+
+    @ViewBuilder
+    private func pageView(_ page: BookTypesetter.Page?, width: CGFloat, height: CGFloat, recto: Bool) -> some View {
+        if let page {
+            Image(nsImage: book.image(of: page))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: width, height: height)
+                .overlay {
+                    // A soft shadow along the spine, so a spread reads as an open book.
+                    LinearGradient(colors: [.black.opacity(0.1), .clear], startPoint: recto ? .leading : .trailing,
+                                   endPoint: recto ? UnitPoint(x: 0.08, y: 0.5) : UnitPoint(x: 0.92, y: 0.5))
+                        .allowsHitTesting(false)
+                }
+        } else {
+            Color.clear.frame(width: width, height: height)
+        }
     }
 }

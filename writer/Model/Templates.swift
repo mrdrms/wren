@@ -431,6 +431,8 @@ struct ProjectInfo: Codable, Equatable {
     var kind: ProjectKind
     var goal: Int?
     var author: String?
+    /// How the book prints: trim size, margins, page numbers. Remembered per book.
+    var layout: BookSettings?
 
     static let fileName = ".wren-project.json"
 

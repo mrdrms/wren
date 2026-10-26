@@ -266,7 +266,7 @@ enum Exporter {
 
     static func exportPDF(title: String, markdown: String, folder: URL?, style: BlogStyle) -> Bool {
         guard let url = savePanel(title: title, type: .pdf),
-              let data = pdfData(html: printHTML(title: title, body: printBody(markdown), style: style, folder: folder)) else { return false }
+              let data = pdfData(html: printHTML(title: title, body: printBody(markdown), style: style, folder: folder), title: title) else { return false }
         return (try? data.write(to: url)) != nil
     }
 
@@ -285,7 +285,7 @@ enum Exporter {
         var label: String {
             switch self {
             case .word: "Word (.docx)"
-            case .pdf: "PDF"
+            case .pdf: "Print-ready PDF"
             case .html: "Web page (.html)"
             case .markdown: "Markdown (.md)"
             }
@@ -302,7 +302,7 @@ enum Exporter {
 
     /// Stitches a book's chapters into one manuscript. In PDFs every chapter starts on a new page.
     static func compileBook(title: String, author: String?, chapters: [String], titlePage: Bool,
-                            format: CompileFormat, style: BlogStyle, folder: URL) -> Bool {
+                            format: CompileFormat, style: BlogStyle, folder: URL, layout: BookSettings = BookSettings()) -> Bool {
         guard let url = savePanel(title: title, type: format.type) else { return false }
         let cleaned = chapters.map { FrontMatter.strip(Ghost.clean($0)).trimmingCharacters(in: .whitespacesAndNewlines) }
         let byline = author.map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : $0 }
@@ -320,17 +320,10 @@ enum Exporter {
             let page = MarkdownHTML.document(title: title, body: body, style: style).replacingOccurrences(of: "</style>", with: bookCSS + "</style>")
             data = embedMedia(in: page, folder: folder).data(using: .utf8)
         case .pdf:
-            // One PDF per chapter, then joined, so each chapter opens on a fresh page.
-            let pages = (titlePage ? [titleHTML] : []) + cleaned.map { printBody($0) }
-            let document = PDFDocument()
-            for body in pages {
-                guard let chunk = pdfData(html: printHTML(title: title, body: body, style: style, folder: folder)),
-                      let part = PDFDocument(data: chunk) else { continue }
-                for index in 0..<part.pageCount {
-                    if let page = part.page(at: index) { document.insert(page, at: document.pageCount) }
-                }
-            }
-            data = document.pageCount > 0 ? document.dataRepresentation() : nil
+            // Typeset as a printed book: trim size, mirrored margins, chapters on new pages.
+            var settings = layout
+            settings.titlePage = titlePage
+            data = BookTypesetter(title: title, author: byline, chapters: cleaned, settings: settings).pdfData()
         case .word:
             let body = ((titlePage ? [titleHTML] : []) + cleaned.map { printBody($0) }).joined(separator: "\n<hr>\n")
             data = wordData(html: printHTML(title: title, body: body, style: style, folder: folder))
@@ -358,13 +351,14 @@ enum Exporter {
         embedMedia(in: MarkdownHTML.document(title: title, body: body, style: style, print: true), folder: folder)
     }
 
-    private static let pageSize = NSSize(width: 595, height: 842) // A4
-    private static let margin: CGFloat = 64
+    /// A single sheet as a PDF: A4, about an inch of margin, page numbers from page two.
+    private static let sheetLayout = BookSettings(trim: .a4, twoSided: false, chaptersOnRight: false, titlePage: false,
+                                                  pageNumbers: true, runningHeads: false)
 
     /// HTML → attributed text, with oversized images shrunk to the page width.
     private static func attributed(html: String) -> NSMutableAttributedString? {
         guard let data = html.data(using: .utf8), let imported = NSAttributedString(html: data, documentAttributes: nil) else { return nil }
-        let width = pageSize.width - 2 * margin
+        let width = BookTypesetter.textWidth(for: sheetLayout)
         let attributed = NSMutableAttributedString(attributedString: imported)
         attributed.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
             guard let attachment = value as? NSTextAttachment else { return }
@@ -380,25 +374,9 @@ enum Exporter {
         return attributed
     }
 
-    private static func pdfData(html: String) -> Data? {
+    private static func pdfData(html: String, title: String = "") -> Data? {
         guard let text = attributed(html: html) else { return nil }
-        let printInfo = NSPrintInfo()
-        printInfo.paperSize = pageSize
-        printInfo.topMargin = margin
-        printInfo.bottomMargin = margin
-        printInfo.leftMargin = margin
-        printInfo.rightMargin = margin
-        printInfo.horizontalPagination = .fit
-        printInfo.verticalPagination = .automatic
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: pageSize.width - 2 * margin, height: 100))
-        textView.textStorage?.setAttributedString(text)
-        textView.isVerticallyResizable = true
-        textView.sizeToFit()
-        let output = NSMutableData()
-        let operation = NSPrintOperation.pdfOperation(with: textView, inside: textView.bounds, to: output, printInfo: printInfo)
-        operation.showsPrintPanel = false
-        operation.showsProgressPanel = false
-        return operation.run() ? output as Data : nil
+        return BookTypesetter(title: title, document: text, settings: sheetLayout).pdfData()
     }
 
     private static func wordData(html: String) -> Data? {

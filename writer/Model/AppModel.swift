@@ -558,17 +558,32 @@ final class AppModel {
         library.chapters(in: folder).reduce(0) { $0 + $1.words }
     }
 
-    func compile(folder: URL, format: Exporter.CompileFormat, titlePage: Bool) {
+    func compile(folder: URL, format: Exporter.CompileFormat, titlePage: Bool, layout: BookSettings = BookSettings()) {
         compileFolder = nil
         saveNow()
         let info = library.projects[folder]
         let chapters = library.chapters(in: folder).compactMap { try? String(contentsOf: $0.url, encoding: .utf8) }
         guard !chapters.isEmpty else { return showToast("This book has no chapters yet", symbol: "book.closed") }
-        let title = library.tree.flatMap { [$0] + ($0.children ?? []) }.first { $0.url == folder }?.name ?? folder.lastPathComponent
+        let title = bookTitle(folder)
+        if var info, info.layout != layout {
+            info.layout = layout
+            setProject(info, for: folder)
+        }
         if Exporter.compileBook(title: title, author: info?.author, chapters: chapters, titlePage: titlePage,
-                                format: format, style: prefs.blogStyle, folder: folder) {
+                                format: format, style: prefs.blogStyle, folder: folder, layout: layout) {
             showToast("Manuscript compiled: \(chapters.count) chapters", symbol: "books.vertical.fill")
         }
+    }
+
+    func bookTitle(_ folder: URL) -> String {
+        library.tree.flatMap { [$0] + ($0.children ?? []) }.first { $0.url == folder }?.name ?? folder.lastPathComponent
+    }
+
+    /// The book's chapters, cleaned for print, for the compile preview.
+    func printableChapters(_ folder: URL) -> [String] {
+        saveNow()
+        return library.chapters(in: folder).compactMap { try? String(contentsOf: $0.url, encoding: .utf8) }
+            .map { FrontMatter.strip(Ghost.clean($0)).trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
     func beginNewFolder(in parent: URL? = nil) {
