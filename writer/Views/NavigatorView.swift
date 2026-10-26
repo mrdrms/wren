@@ -165,6 +165,8 @@ private struct FolderMenu: View {
 private struct SheetsPage: View {
     @Environment(AppModel.self) private var model
     @State private var backTargeted = false
+    /// ⌘-click and ⇧-click pick several sheets; a single pick opens it.
+    @State private var selection: Set<URL> = []
 
     var body: some View {
         @Bindable var model = model
@@ -221,8 +223,26 @@ private struct SheetsPage: View {
             .padding(.top, 8)
             .padding(.bottom, 8)
 
-            // Clicking empty space in a list deselects; that mustn't close the sheet you're in.
-            List(selection: Binding(get: { model.selectedSheet }, set: { if let url = $0 { model.selectedSheet = url } })) {
+            if selected(in: sheets).count > 1 {
+                HStack {
+                    Text("\(selected(in: sheets).count) selected").font(.callout.weight(.medium))
+                    Spacer()
+                    Button("Deselect") { selection = model.selectedSheet.map { [$0] } ?? [] }
+                        .buttonStyle(.borderless)
+                    Button(role: .destructive) {
+                        model.trash(selected(in: sheets))
+                    } label: {
+                        Label("Move to Trash", systemImage: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Move the selected sheets to the Trash (⌫)")
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
+
+            List(selection: $selection) {
                 if case .folder(let folder) = model.sidebarSelection, let info = model.library.projects[folder], model.searchText.isEmpty {
                     ProjectHeader(folder: folder, info: info)
                         .listRowSeparator(.hidden)
@@ -233,8 +253,25 @@ private struct SheetsPage: View {
                     SheetRow(sheet: sheet)
                         .tag(sheet.url)
                         .draggable(sheet.url)
-                        .contextMenu { SheetMenu(sheet: sheet) }
                 }
+            }
+            // Right-click acts on everything selected (or just the row you clicked).
+            .contextMenu(forSelectionType: URL.self) { urls in
+                let picked = sheets.filter { urls.contains($0.url) }
+                if picked.count == 1, let sheet = picked.first {
+                    SheetMenu(sheet: sheet)
+                } else if picked.count > 1 {
+                    MultiSheetMenu(sheets: picked)
+                }
+            }
+            .onDeleteCommand { model.trash(selected(in: sheets)) }
+            // Clicking empty space deselects; that mustn't close the sheet you're in, so only
+            // a single pick opens anything.
+            .onChange(of: selection) { _, picked in
+                if picked.count == 1, let url = picked.first, url != model.selectedSheet { model.selectedSheet = url }
+            }
+            .onChange(of: model.selectedSheet, initial: true) { _, url in
+                if let url, !selection.contains(url) { selection = [url] }
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -333,7 +370,7 @@ private struct SheetMenu: View {
         Button("Rename…") { model.beginRename(sheet.url) }
         Button("Duplicate") { model.duplicate(sheet.url) }
         Menu("Move To") {
-            ForEach(Self.flatten(model.library.tree), id: \.node.url) { entry in
+            ForEach(folderList(model.library.tree), id: \.node.url) { entry in
                 Button(String(repeating: "    ", count: entry.depth) + entry.node.name) {
                     model.move(sheet.url, to: entry.node.url)
                 }
@@ -345,9 +382,36 @@ private struct SheetMenu: View {
         Button("Move to Trash", role: .destructive) { model.trash(sheet.url) }
     }
 
-    private static func flatten(_ nodes: [FolderNode], depth: Int = 0) -> [(node: FolderNode, depth: Int)] {
-        nodes.flatMap { [(node: $0, depth: depth)] + flatten($0.children ?? [], depth: depth + 1) }
+}
+
+extension SheetsPage {
+    /// The selection, limited to sheets still in the list and in list order.
+    fileprivate func selected(in sheets: [Sheet]) -> [URL] {
+        sheets.map(\.url).filter { selection.contains($0) }
     }
+}
+
+private struct MultiSheetMenu: View {
+    @Environment(AppModel.self) private var model
+    let sheets: [Sheet]
+
+    var body: some View {
+        Menu("Move \(sheets.count) Sheets To") {
+            ForEach(folderList(model.library.tree), id: \.node.url) { entry in
+                Button(String(repeating: "    ", count: entry.depth) + entry.node.name) {
+                    model.move(sheets.map(\.url), to: entry.node.url)
+                }
+            }
+        }
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(sheets.map(\.url)) }
+        Divider()
+        Button("Move \(sheets.count) Sheets to Trash", role: .destructive) { model.trash(sheets.map(\.url)) }
+    }
+}
+
+/// Every folder in the library, indented by depth, for "Move To" menus.
+private func folderList(_ nodes: [FolderNode], depth: Int = 0) -> [(node: FolderNode, depth: Int)] {
+    nodes.flatMap { [(node: $0, depth: depth)] + folderList($0.children ?? [], depth: depth + 1) }
 }
 
 // MARK: Shared

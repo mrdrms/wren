@@ -165,10 +165,23 @@ struct MarkdownEditor: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: 0, length: 0))
             textView.scrollToBeginningOfDocument(nil)
             updateDecorations()
+            repaintAll(textView)
             DispatchQueue.main.async {
                 textView.window?.makeFirstResponder(textView)
                 self.centerCaret(animated: false)
+                // Again once layout has settled: going from a long sheet to a short one left the
+                // old sheet's lines on screen below the first line.
+                self.repaintAll(textView)
             }
+        }
+
+        private func repaintAll(_ textView: NSTextView) {
+            if let layout = textView.layoutManager {
+                layout.invalidateDisplay(forCharacterRange: NSRange(location: 0, length: (textView.string as NSString).length))
+            }
+            textView.setNeedsDisplay(textView.visibleRect)
+            textView.needsDisplay = true
+            textView.enclosingScrollView?.contentView.needsDisplay = true
         }
 
         /// An image finished loading or the column width changed: re-measure and re-place previews.

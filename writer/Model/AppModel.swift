@@ -703,7 +703,9 @@ final class AppModel {
         if let copy = try? library.duplicate(url) { selectedSheet = copy }
     }
 
-    func trash(_ url: URL) {
+    /// Moves a sheet or folder to the Trash. Returns whether it went.
+    @discardableResult
+    func trash(_ url: URL, announce: Bool = true) -> Bool {
         if let companion, companion.url == url || companion.url.path.hasPrefix(url.path + "/") {
             companion.saveNow()
             self.companion = nil
@@ -721,10 +723,37 @@ final class AppModel {
             if let trashed = try library.trash(url) {
                 moveDocumentIdentity(from: url, to: trashed, sheets: inside)
             }
-            showToast("Moved to Trash", symbol: "trash")
+            if announce { showToast("Moved to Trash", symbol: "trash") }
+            return true
         } catch {
-            showToast("Couldn't move to Trash", symbol: "exclamationmark.triangle.fill")
+            if announce { showToast("Couldn't move to Trash", symbol: "exclamationmark.triangle.fill") }
+            return false
         }
+    }
+
+    /// Several sheets at once: one confirmation, one summary. They go to the Trash, so
+    /// they can be put back from Finder.
+    func trash(_ urls: [URL]) {
+        guard urls.count > 1 else {
+            if let url = urls.first { trash(url) }
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Move \(urls.count) sheets to the Trash?"
+        alert.informativeText = "You can put them back from the Trash in Finder."
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let moved = urls.filter { trash($0, announce: false) }.count
+        if moved == urls.count {
+            showToast("Moved \(moved) sheets to Trash", symbol: "trash")
+        } else {
+            showToast("Moved \(moved) of \(urls.count) sheets to Trash. Some couldn't be moved.", symbol: "exclamationmark.triangle.fill")
+        }
+    }
+
+    func move(_ urls: [URL], to folder: URL) {
+        urls.forEach { move($0, to: folder) }
     }
 
     func move(_ url: URL, to folder: URL) {
