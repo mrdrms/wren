@@ -67,15 +67,15 @@ enum BlogStyle: String, CaseIterable, Identifiable {
                               extra: ".post > p:first-of-type::first-letter { float: left; font-size: 3.4em; line-height: 0.9; padding: 0.06em 0.1em 0 0; font-weight: 700; }")
         case .mono:
             return Typography(body: mono, heading: mono, size: "15px", lineHeight: "1.75", measure: "720px", headingWeight: "700",
-                              extra: "h1::before { content: \"# \"; opacity: .45; } h2::before { content: \"## \"; opacity: .4; }")
+                              extra: "h1, h2, h3 { letter-spacing: -0.01em; } h2 { border-bottom: 1px solid rgba(127,127,127,.25); padding-bottom: .3em; }")
         case .terminal:
             return Typography(body: mono, heading: mono, size: "15px", lineHeight: "1.75", measure: "760px", headingWeight: "700", extra: """
                 body { text-shadow: 0 0 6px rgba(57,255,136,.18); background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
                 .post { border-left: 1px solid rgba(57,255,136,.18); }
                 .post-header::before { content: "user@wren:~$ cat post.md"; display: block; color: #4f8a5c; font-size: .85em; margin-bottom: 1.4em; }
                 h1::before { content: "$ "; color: #39ff88; }
-                h2::before { content: "## "; color: #4f8a5c; }
-                h3::before { content: "### "; color: #4f8a5c; }
+                h2::before { content: "▸ "; color: #4f8a5c; }
+                h3::before { content: "› "; color: #4f8a5c; }
                 a { text-decoration-style: dotted; }
                 pre { border: 1px solid rgba(57,255,136,.25); }
                 ::selection { background: #39ff88; color: #070b08; }
