@@ -64,6 +64,8 @@ final class Preferences {
     var liveFormatting: Bool { didSet { defaults.set(liveFormatting, forKey: "liveFormatting") } }
     var hideMarkup: Bool { didSet { defaults.set(hideMarkup, forKey: "hideMarkup") } }
     var showFormatBar: Bool { didSet { defaults.set(showFormatBar, forKey: "showFormatBar") } }
+    /// Fade the format bar and status pill while typing; moving the pointer brings them back.
+    var minimalWhileTyping: Bool { didSet { defaults.set(minimalWhileTyping, forKey: "minimalWhileTyping") } }
     var pomodoroEnabled: Bool { didSet { defaults.set(pomodoroEnabled, forKey: "pomodoroEnabled") } }
     var pomodoroWork: Int { didSet { defaults.set(pomodoroWork, forKey: "pomodoroWork") } }
     var pomodoroShortBreak: Int { didSet { defaults.set(pomodoroShortBreak, forKey: "pomodoroShortBreak") } }
@@ -92,9 +94,10 @@ final class Preferences {
             "flowLock": false,
             "rhythm": false,
             "zenFullScreen": true,
-            "liveFormatting": false,
-            "hideMarkup": true,
+            "liveFormatting": true,
+            "hideMarkup": false,
             "showFormatBar": true,
+            "minimalWhileTyping": true,
             "pomodoroEnabled": false,
             "pomodoroWork": 25,
             "pomodoroShortBreak": 5,
@@ -124,6 +127,7 @@ final class Preferences {
         liveFormatting = defaults.bool(forKey: "liveFormatting")
         hideMarkup = defaults.bool(forKey: "hideMarkup")
         showFormatBar = defaults.bool(forKey: "showFormatBar")
+        minimalWhileTyping = defaults.bool(forKey: "minimalWhileTyping")
         pomodoroEnabled = defaults.bool(forKey: "pomodoroEnabled")
         pomodoroWork = defaults.integer(forKey: "pomodoroWork")
         pomodoroShortBreak = defaults.integer(forKey: "pomodoroShortBreak")

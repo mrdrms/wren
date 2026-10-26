@@ -187,6 +187,8 @@ final class AppModel {
     var editorPopupOpen = false
     let pomodoro = Pomodoro()
     private(set) var isTyping = false
+    /// Minimal mode: controls around the page have faded out because you're typing.
+    var chromeHidden = false
     var celebration: Celebration?
     var toast: Toast?
     var renameTarget: URL?
@@ -291,6 +293,7 @@ final class AppModel {
         scheduleAnalysis()
 
         isTyping = true
+        if prefs.minimalWhileTyping && !chromeHidden { chromeHidden = true }
         typingTask?.cancel()
         typingTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.6))

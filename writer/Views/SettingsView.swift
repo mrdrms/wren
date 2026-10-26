@@ -100,6 +100,9 @@ private struct WritingSettings: View {
                 Toggle("Hide formatting marks (show them only on the line you're editing)", isOn: $prefs.hideMarkup)
                     .disabled(!prefs.liveFormatting)
                 Toggle("Show the format bar", isOn: $prefs.showFormatBar)
+                Toggle("Hide controls while typing", isOn: $prefs.minimalWhileTyping)
+                Text("The format bar and status pill fade as you type. Move the pointer to bring them back.")
+                    .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("Formatting")
             } footer: {

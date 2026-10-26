@@ -5,6 +5,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var escapeMonitor: Any?
+    @State private var pointerMonitor: Any?
     @State private var sceneFrame: CGRect = .zero
     /// The sidebar as it was before Zen or a full preview folded it away.
     @State private var columnsBeforeImmersive: NavigationSplitViewVisibility?
@@ -118,6 +119,22 @@ struct ContentView: View {
             model.library.refresh()
         }
         .onAppear {
+            // Minimal mode: a deliberate move of the pointer (not a brush of the trackpad while
+            // typing) or a click brings the faded controls back.
+            NSApp.windows.forEach { $0.acceptsMouseMovedEvents = true }
+            var travelled: CGFloat = 0
+            pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .scrollWheel]) { [model] event in
+                guard model.chromeHidden else { travelled = 0; return event }
+                if event.type == .mouseMoved {
+                    travelled += abs(event.deltaX) + abs(event.deltaY)
+                    guard travelled > 24 else { return event }
+                } else if event.type == .scrollWheel {
+                    return event
+                }
+                travelled = 0
+                model.chromeHidden = false
+                return event
+            }
             // Esc steps out of Zen, a full preview, the board or the break screen,
             // unless a sheet or the palette is in charge of the keyboard.
             escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [model] event in

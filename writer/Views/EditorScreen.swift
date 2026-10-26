@@ -63,7 +63,6 @@ struct EditorScreen: View {
             }
             ToolbarSpacer(.fixed)
             ToolbarItemGroup(placement: .primaryAction) {
-                AtmosphereButton()
                 Button { model.toggleZen() } label: {
                     Label("Zen", systemImage: model.zen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                 }
@@ -116,46 +115,6 @@ struct ToolsMenu: View {
     }
 }
 
-/// Opens the atmosphere picker.
-struct AtmosphereButton: View {
-    @Environment(AppModel.self) private var model
-    @State private var showing = false
-
-    var body: some View {
-        Button { showing.toggle() } label: {
-            Label("Atmosphere", systemImage: "sparkles")
-        }
-        .help("Atmosphere: \(model.prefs.theme.name)")
-        .popover(isPresented: $showing, arrowEdge: .bottom) {
-            AtmospherePicker()
-                .environment(model)
-        }
-    }
-}
-
-/// Live, animated previews of every atmosphere.
-struct AtmospherePicker: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        @Bindable var prefs = model.prefs
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Choose a theme")
-                .font(.system(.title3, design: .serif).weight(.semibold))
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(168), spacing: 12), count: 4), spacing: 12) {
-                ForEach(Theme.all) { theme in
-                    AtmosphereCard(theme: theme, selected: prefs.themeID == theme.id)
-                        .onTapGesture { withAnimation(.easeInOut(duration: 0.6)) { prefs.themeID = theme.id } }
-                }
-            }
-            Toggle("Animate the scene", isOn: $prefs.ambient)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-        }
-        .padding(18)
-    }
-}
-
 struct AtmosphereCard: View {
     let theme: Theme
     let selected: Bool
@@ -202,6 +161,10 @@ extension EditorScreen {
                     FormatBar()
                         .padding(.top, 6)
                         .padding(.bottom, 6)
+                        // Keeps its row while hidden, so the text never jumps.
+                        .opacity(model.chromeHidden ? 0 : 1)
+                        .allowsHitTesting(!model.chromeHidden)
+                        .animation(.easeInOut(duration: model.chromeHidden ? 0.5 : 0.2), value: model.chromeHidden)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 MarkdownEditor(model: model)
@@ -213,9 +176,10 @@ extension EditorScreen {
                 StoryboardView()
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             } else {
+                let faded = (model.chromeHidden || model.isTyping) && !hoveringHUD
                 StatusHUD()
-                    .opacity(model.isTyping && !hoveringHUD ? 0.12 : 1)
-                    .animation(.easeInOut(duration: model.isTyping ? 0.6 : 0.25), value: model.isTyping)
+                    .opacity(faded ? (model.chromeHidden ? 0 : 0.12) : 1)
+                    .animation(.easeInOut(duration: faded ? 0.6 : 0.25), value: faded)
                     .onHover { hoveringHUD = $0 }
                     .padding(.bottom, 18)
             }
