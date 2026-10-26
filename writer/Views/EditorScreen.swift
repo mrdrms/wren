@@ -30,15 +30,6 @@ struct EditorScreen: View {
         }
         .navigationTitle(model.zen ? "" : model.currentTitle)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    withAnimation(.smooth(duration: 0.3)) { prefs.showSheetList.toggle() }
-                } label: {
-                    Label(prefs.showSheetList ? "Hide Sheet List" : "Show Sheet List",
-                          systemImage: prefs.showSheetList ? "list.bullet.rectangle.fill" : "list.bullet.rectangle")
-                }
-                .help(prefs.showSheetList ? "Hide the sheet list (⌥⌘L)" : "Show the sheet list (⌥⌘L)")
-            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
                     Picker("Focus", selection: Bindable(prefs).focus) {

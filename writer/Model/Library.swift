@@ -26,6 +26,10 @@ enum SidebarSelection: Hashable {
     case all, recent, folder(URL)
 }
 
+enum NavigatorPage {
+    case library, sheets
+}
+
 /// Your writing lives as plain Markdown files in ordinary folders: no proprietary
 /// database, no lock-in. Wren keeps a default library and can add any folder you choose.
 @Observable

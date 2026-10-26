@@ -11,22 +11,11 @@ struct ContentView: View {
         @Bindable var model = model
         let theme = model.prefs.theme
         ZStack {
-            // The sheet list can be hidden: then it's sidebar + editor. The editor itself is
-            // kept alive across the switch, so nothing is lost.
-            if model.prefs.showSheetList {
-                NavigationSplitView(columnVisibility: $model.columnVisibility) {
-                    SidebarView()
-                } content: {
-                    SheetListView()
-                } detail: {
-                    detail(theme)
-                }
-            } else {
-                NavigationSplitView(columnVisibility: $model.columnVisibility) {
-                    SidebarView()
-                } detail: {
-                    detail(theme)
-                }
+            // Navigator and page; the inspector joins only when asked for.
+            NavigationSplitView(columnVisibility: $model.columnVisibility) {
+                NavigatorView()
+            } detail: {
+                detail(theme)
             }
             // Zen and preview-alone: the page takes over the window. The split view stays
             // as it was underneath, so leaving brings everything back exactly.
@@ -36,7 +25,6 @@ struct ContentView: View {
             }
         }
         .animation(.smooth(duration: 0.3), value: model.isImmersive)
-        .animation(.smooth(duration: 0.3), value: model.prefs.showSheetList)
         .background {
             // Measure the whole window once; panels draw their slice of one scene.
             GeometryReader { proxy in

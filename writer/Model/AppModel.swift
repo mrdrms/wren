@@ -132,7 +132,11 @@ final class AppModel {
     let library = LibraryStore()
 
     // Navigation
-    var sidebarSelection: SidebarSelection? = .all
+    var sidebarSelection: SidebarSelection? = .all {
+        didSet { if sidebarSelection != oldValue { navigatorPage = .sheets } }
+    }
+    /// Which page of the navigator is showing: your folders, or the sheets inside one.
+    var navigatorPage: NavigatorPage = .sheets
     var selectedSheet: URL? {
         didSet { if selectedSheet != oldValue { open(selectedSheet) } }
     }
@@ -226,6 +230,16 @@ final class AppModel {
         case .recent: "Recent"
         case .folder(let url): library.tree.first(where: { $0.url == url })?.name ?? url.lastPathComponent
         default: "All Sheets"
+        }
+    }
+
+    /// Flips the navigator between the Library and the sheet list, bringing it into view.
+    func toggleLibrary() {
+        if columnVisibility == .detailOnly {
+            columnVisibility = .all
+            navigatorPage = .library
+        } else {
+            navigatorPage = navigatorPage == .library ? .sheets : .library
         }
     }
 

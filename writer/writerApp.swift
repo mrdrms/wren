@@ -156,7 +156,7 @@ struct WrenCommands: Commands {
             }
         }
         CommandGroup(after: .sidebar) {
-            Button(prefs.showSheetList ? "Hide Sheet List" : "Show Sheet List") { prefs.showSheetList.toggle() }
+            Button(model.navigatorPage == .library ? "Show Sheets" : "Show Library") { model.toggleLibrary() }
                 .keyboardShortcut("l", modifiers: [.command, .option])
             Button("Toggle Inspector") { model.showInspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])

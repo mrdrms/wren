@@ -64,7 +64,6 @@ final class Preferences {
     var liveFormatting: Bool { didSet { defaults.set(liveFormatting, forKey: "liveFormatting") } }
     var hideMarkup: Bool { didSet { defaults.set(hideMarkup, forKey: "hideMarkup") } }
     var showFormatBar: Bool { didSet { defaults.set(showFormatBar, forKey: "showFormatBar") } }
-    var showSheetList: Bool { didSet { defaults.set(showSheetList, forKey: "showSheetList") } }
     var pomodoroEnabled: Bool { didSet { defaults.set(pomodoroEnabled, forKey: "pomodoroEnabled") } }
     var pomodoroWork: Int { didSet { defaults.set(pomodoroWork, forKey: "pomodoroWork") } }
     var pomodoroShortBreak: Int { didSet { defaults.set(pomodoroShortBreak, forKey: "pomodoroShortBreak") } }
@@ -96,7 +95,6 @@ final class Preferences {
             "liveFormatting": false,
             "hideMarkup": true,
             "showFormatBar": true,
-            "showSheetList": true,
             "pomodoroEnabled": false,
             "pomodoroWork": 25,
             "pomodoroShortBreak": 5,
@@ -126,7 +124,6 @@ final class Preferences {
         liveFormatting = defaults.bool(forKey: "liveFormatting")
         hideMarkup = defaults.bool(forKey: "hideMarkup")
         showFormatBar = defaults.bool(forKey: "showFormatBar")
-        showSheetList = defaults.bool(forKey: "showSheetList")
         pomodoroEnabled = defaults.bool(forKey: "pomodoroEnabled")
         pomodoroWork = defaults.integer(forKey: "pomodoroWork")
         pomodoroShortBreak = defaults.integer(forKey: "pomodoroShortBreak")

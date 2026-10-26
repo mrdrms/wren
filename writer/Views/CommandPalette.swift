@@ -191,7 +191,7 @@ struct CommandPalette: View {
             PaletteItem(id: "zen", title: "Zen Mode", subtitle: "Hide everything but the page", symbol: "leaf", shortcut: "⇧⌘↩") { m.toggleZen() },
             PaletteItem(id: "journey", title: "Writing Journey", subtitle: "Streaks and history", symbol: "chart.line.uptrend.xyaxis", shortcut: "⇧⌘J") { m.showJourney = true },
             PaletteItem(id: "snapshot", title: "Take Snapshot", subtitle: nil, symbol: "camera", shortcut: "⇧⌘S") { m.takeSnapshot() },
-            PaletteItem(id: "sheetlist", title: p.showSheetList ? "Hide Sheet List" : "Show Sheet List", subtitle: "Just the sidebar and your page", symbol: "list.bullet.rectangle", shortcut: "⌥⌘L") { p.showSheetList.toggle() },
+            PaletteItem(id: "library", title: m.navigatorPage == .library ? "Show Sheets" : "Show Library", subtitle: "Your folders and projects", symbol: "books.vertical", shortcut: "⌥⌘L") { m.toggleLibrary() },
             PaletteItem(id: "inspector", title: "Toggle Inspector", subtitle: nil, symbol: "sidebar.trailing", shortcut: "⌥⌘I") { m.showInspector.toggle() },
             PaletteItem(id: "goal", title: "Set Word Goal…", subtitle: nil, symbol: "target", shortcut: nil) { m.inspectorTab = .goals; m.showInspector = true },
             PaletteItem(id: "outline", title: "Show Outline", subtitle: nil, symbol: "list.bullet.indent", shortcut: nil) { m.inspectorTab = .outline; m.showInspector = true },
