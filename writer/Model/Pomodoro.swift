@@ -25,7 +25,10 @@ final class Pomodoro {
     private(set) var pausedRemaining: TimeInterval?
     /// Work sessions finished in the current set (resets after a long break).
     private(set) var cycle = 0
-    private(set) var completedToday: Int
+    /// Sessions completed per day ("yyyy-MM-dd").
+    private var log: [String: Int]
+    /// Read fresh each time, so it resets at midnight even if the app stays open.
+    var completedToday: Int { log[WritingLog.key(for: .now)] ?? 0 }
 
     /// Called when a phase ends: (the phase that finished, the phase that comes next).
     @ObservationIgnored var onPhaseEnd: ((Phase, Phase) -> Void)?
@@ -35,8 +38,7 @@ final class Pomodoro {
     @ObservationIgnored private let defaults = UserDefaults.standard
 
     init() {
-        let log = defaults.dictionary(forKey: "pomodoroLog") as? [String: Int] ?? [:]
-        completedToday = log[WritingLog.key(for: .now)] ?? 0
+        log = UserDefaults.standard.dictionary(forKey: "pomodoroLog") as? [String: Int] ?? [:]
     }
 
     var isActive: Bool { phase != .idle }
@@ -148,10 +150,7 @@ final class Pomodoro {
     }
 
     private func recordCompletion() {
-        var log = defaults.dictionary(forKey: "pomodoroLog") as? [String: Int] ?? [:]
-        let key = WritingLog.key(for: .now)
-        log[key, default: 0] += 1
-        completedToday = log[key] ?? 0
+        log[WritingLog.key(for: .now), default: 0] += 1
         defaults.set(log, forKey: "pomodoroLog")
     }
 }

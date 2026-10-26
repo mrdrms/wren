@@ -221,7 +221,10 @@ final class AppModel {
         pomodoro.onPhaseStart = { [weak self] phase in self?.pomodoroDidStart(phase) }
         pomodoro.onPhaseEnd = { [weak self] finished, next in self?.pomodoroDidEnd(finished, next: next) }
         reader.onWord = { [weak self] range in
-            self?.editor?.spokenRange = range
+            // Words arrive asynchronously: one can land after reading stopped or the text changed.
+            guard let self, self.isReading, let editor = self.editor,
+                  NSMaxRange(range) <= (editor.string as NSString).length else { return }
+            editor.spokenRange = range
         }
         reader.onFinish = { [weak self] in
             self?.isReading = false
@@ -394,10 +397,12 @@ final class AppModel {
     }
 
     /// A sheet, or a folder of sheets, was renamed or moved: the open sheets, their history
-    /// and goals follow it.
-    private func moveDocumentIdentity(from old: URL, to new: URL) {
+    /// and goals follow it. `sheets` are the sheets that were inside it (for a folder).
+    private func moveDocumentIdentity(from old: URL, to new: URL, sheets: [URL]? = nil) {
+        // After a rename the library already lists the new paths; map them back to find the old.
+        let inside = sheets ?? library.sheets.compactMap { Self.relocated($0.url, from: new, to: old) }
         var followed: [(URL, URL)] = [(old, new)]
-        for url in [loadedURL, companion?.url].compactMap({ $0 }) where url != old {
+        for url in Set(inside + [loadedURL, companion?.url].compactMap { $0 }) where url != old {
             if let moved = Self.relocated(url, from: old, to: new) { followed.append((url, moved)) }
         }
         for (from, to) in followed {
@@ -664,8 +669,14 @@ final class AppModel {
             dirty = false
             selectedSheet = nil
         }
+        // History, snapshots, cuts and goals go with it into the Trash, so a new sheet that
+        // later takes the same name starts clean.
+        let inside = library.sheets.map(\.url).filter { Self.relocated($0, from: url, to: url) != nil }
+        if isWithin(previousURL, url) { previousURL = nil } // ⌥⌘3 mustn't reopen it from the Trash
         do {
-            try library.trash(url)
+            if let trashed = try library.trash(url) {
+                moveDocumentIdentity(from: url, to: trashed, sheets: inside)
+            }
             showToast("Moved to Trash", symbol: "trash")
         } catch {
             showToast("Couldn't move to Trash", symbol: "exclamationmark.triangle.fill")
@@ -1136,8 +1147,10 @@ final class AppModel {
     // MARK: Images & video
 
     /// Copies media into the sheet's `assets` folder and returns the Markdown to insert.
-    func importImages(_ sources: [ImageSource]) -> [String] {
-        guard let url = loadedURL else { return [] }
+    /// Copies media into the `assets` folder beside `sheet` (the main sheet by default) and
+    /// returns the Markdown that links it.
+    func importImages(_ sources: [ImageSource], for sheet: URL? = nil) -> [String] {
+        guard let url = sheet ?? loadedURL else { return [] }
         var snippets: [String] = []
         var videos = 0
         for source in sources {

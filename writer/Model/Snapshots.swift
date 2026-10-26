@@ -55,11 +55,19 @@ enum SnapshotStore {
         try? FileManager.default.removeItem(at: snapshot.url)
     }
 
-    /// Keeps snapshots attached to a sheet after it's renamed.
+    /// Keeps snapshots attached to a sheet after it's renamed, merging with any already there.
     static func move(from old: URL, to new: URL) {
+        let fm = FileManager.default
         let source = folder(for: old)
         let target = folder(for: new)
-        guard FileManager.default.fileExists(atPath: source.path), !FileManager.default.fileExists(atPath: target.path) else { return }
-        try? FileManager.default.moveItem(at: source, to: target)
+        guard source != target, fm.fileExists(atPath: source.path) else { return }
+        guard fm.fileExists(atPath: target.path) else {
+            try? fm.moveItem(at: source, to: target)
+            return
+        }
+        for file in (try? fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.moveItem(at: file, to: target.appendingPathComponent(file.lastPathComponent))
+        }
+        try? fm.removeItem(at: source)
     }
 }

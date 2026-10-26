@@ -41,6 +41,11 @@ struct CompanionEditor: NSViewRepresentable {
         textView.textStorage?.delegate = context.coordinator
         context.coordinator.highlighter.imageSize = { [weak textView] in textView?.previewSize(forPath: $0) }
         textView.onImagesNeedRestyle = { [weak coordinator = context.coordinator] in coordinator?.restyle() }
+        // Pasted or dropped media lands beside the second editor's own sheet.
+        textView.onImportImages = { [weak model, weak sheet] sources in
+            guard let model, let sheet else { return [] }
+            return model.importImages(sources, for: sheet.url)
+        }
 
         let scrollView = NSScrollView()
         scrollView.drawsBackground = false

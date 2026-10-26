@@ -94,3 +94,40 @@ struct FileSafetyTests {
         #expect(names.contains("01 One.md") && names.contains("02 Two.md"))
     }
 }
+
+struct HistoryIdentityTests {
+    @Test func historyFollowsAndReplacesStaleRecords() throws {
+        let a = URL(fileURLWithPath: "/tmp/wren-history-\(UUID().uuidString)/A.md")
+        let b = URL(fileURLWithPath: "/tmp/wren-history-\(UUID().uuidString)/B.md")
+        defer {
+            for doc in [a, b] {
+                let file = DocumentKey.supportFolder("History").appendingPathComponent(DocumentKey.make(doc)).appendingPathExtension("jsonl")
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+        HistoryStore.append(TextChange(t: .now, loc: 0, old: "", new: "stale"), for: b)
+        HistoryStore.append(TextChange(t: .now, loc: 0, old: "", new: "live"), for: a)
+        HistoryStore.move(from: a, to: b)
+        #expect(HistoryStore.replay(HistoryStore.load(for: b)) == "live")
+        #expect(HistoryStore.load(for: a).isEmpty)
+    }
+}
+
+@MainActor
+struct MoveMediaTests {
+    @Test func movedSheetKeepsItsImages() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("wren-media-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let from = root.appendingPathComponent("Drafts"), to = root.appendingPathComponent("Posts")
+        try FileManager.default.createDirectory(at: from.appendingPathComponent("assets"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: to, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: from.appendingPathComponent("assets/photo.png"))
+        let sheet = from.appendingPathComponent("Post.md")
+        try "Hello\n\n![A photo](assets/photo.png)\n".write(to: sheet, atomically: true, encoding: .utf8)
+
+        let moved = try LibraryStore().move(sheet, to: to)
+        #expect(FileManager.default.fileExists(atPath: to.appendingPathComponent("assets/photo.png").path))
+        #expect(FileManager.default.fileExists(atPath: from.appendingPathComponent("assets/photo.png").path))
+        #expect(moved.lastPathComponent == "Post.md")
+    }
+}

@@ -88,9 +88,12 @@ enum HistoryStore {
         }
     }
 
+    /// The sheet's record follows it; anything left at the destination by an older file
+    /// of the same name is stale and gives way.
     static func move(from old: URL, to new: URL) {
         let source = url(for: old), target = url(for: new)
-        guard FileManager.default.fileExists(atPath: source.path), !FileManager.default.fileExists(atPath: target.path) else { return }
+        guard source != target, FileManager.default.fileExists(atPath: source.path) else { return }
+        try? FileManager.default.removeItem(at: target)
         try? FileManager.default.moveItem(at: source, to: target)
     }
 }
@@ -121,9 +124,12 @@ enum CuttingRoom {
         }
     }
 
+    /// The sheet's record follows it; anything left at the destination by an older file
+    /// of the same name is stale and gives way.
     static func move(from old: URL, to new: URL) {
         let source = url(for: old), target = url(for: new)
-        guard FileManager.default.fileExists(atPath: source.path), !FileManager.default.fileExists(atPath: target.path) else { return }
+        guard source != target, FileManager.default.fileExists(atPath: source.path) else { return }
+        try? FileManager.default.removeItem(at: target)
         try? FileManager.default.moveItem(at: source, to: target)
     }
 }

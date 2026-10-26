@@ -220,8 +220,17 @@ enum Exporter {
         panel.message = "Wren will create a folder containing your post and its media."
         guard panel.runModal() == .OK, let bundle = panel.url else { return false }
         let fm = FileManager.default
+        // "Replace" in the save panel means a whole folder here. Never replace one holding
+        // the sheet itself (your library, say), and send anything replaced to the Trash.
+        if AppModel.relocated(folder, from: bundle, to: bundle) != nil {
+            let alert = NSAlert()
+            alert.messageText = "Choose another name or place"
+            alert.informativeText = "“\(bundle.lastPathComponent)” contains the sheet you're exporting, so Wren won't replace it."
+            alert.runModal()
+            return false
+        }
         do {
-            if fm.fileExists(atPath: bundle.path) { try fm.removeItem(at: bundle) }
+            if fm.fileExists(atPath: bundle.path) { try fm.trashItem(at: bundle, resultingItemURL: nil) }
             let assets = bundle.appendingPathComponent(ImageImporter.folderName, isDirectory: true)
             try fm.createDirectory(at: assets, withIntermediateDirectories: true)
 

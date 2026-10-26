@@ -195,9 +195,13 @@ final class LibraryStore {
         return target
     }
 
-    func trash(_ url: URL) throws {
-        try fm.trashItem(at: url, resultingItemURL: nil)
+    /// Returns where the item landed in the Trash.
+    @discardableResult
+    func trash(_ url: URL) throws -> URL? {
+        var resulting: NSURL?
+        try fm.trashItem(at: url, resultingItemURL: &resulting)
         refresh()
+        return resulting as URL?
     }
 
     func move(_ url: URL, to folder: URL) throws -> URL {
@@ -205,8 +209,27 @@ final class LibraryStore {
         guard url.deletingLastPathComponent().standardizedFileURL != folder.standardizedFileURL else { return url }
         let target = uniqueURL(in: folder, base: url.deletingPathExtension().lastPathComponent, ext: url.pathExtension)
         try fm.moveItem(at: url, to: target)
+        bringMedia(of: target, from: url.deletingLastPathComponent())
         refresh()
         return target
+    }
+
+    /// Images and videos are linked relative to the sheet (`assets/photo.png`). After a move,
+    /// copy the ones it uses so its links keep working. Copied, not moved: other sheets in
+    /// the old folder may use them too.
+    private func bringMedia(of sheet: URL, from oldFolder: URL) {
+        guard Self.markdownExtensions.contains(sheet.pathExtension.lowercased()),
+              let text = try? String(contentsOf: sheet, encoding: .utf8) else { return }
+        let newFolder = sheet.deletingLastPathComponent()
+        for reference in MarkdownImage.references(in: text) {
+            let path = reference.path.removingPercentEncoding ?? reference.path
+            guard URL(string: reference.path)?.scheme == nil, !path.hasPrefix("/"), !path.contains("..") else { continue }
+            let source = oldFolder.appendingPathComponent(path)
+            let destination = newFolder.appendingPathComponent(path)
+            guard fm.fileExists(atPath: source.path), !fm.fileExists(atPath: destination.path) else { continue }
+            try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.copyItem(at: source, to: destination)
+        }
     }
 
     private func uniqueURL(in folder: URL, base: String, ext: String?) -> URL {
