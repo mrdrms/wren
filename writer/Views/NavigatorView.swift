@@ -483,6 +483,7 @@ struct PanelBackground: View {
         let theme = model.prefs.theme
         ZStack {
             AtmosphereView(theme: theme, animated: theme.atmosphere.drifts, continuous: true)
+                .modifier(LightRest())
             // Glass themes let the light through the panel too.
             theme.panelColor.opacity(theme.atmosphere == .aurora ? 0.45 : 1 - opacity * 0.35)
         }

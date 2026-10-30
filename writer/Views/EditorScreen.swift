@@ -10,6 +10,7 @@ struct EditorScreen: View {
         let theme = prefs.theme
         ZStack(alignment: .bottom) {
             AtmosphereView(theme: theme, animated: prefs.ambient || theme.atmosphere.drifts, continuous: true)
+                .modifier(LightRest())
                 .ignoresSafeArea()
             // Plain themes get a desk for the page to lie on; scenes are their own desk.
             if theme.atmosphere == .none {

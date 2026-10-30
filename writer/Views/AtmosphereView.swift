@@ -6,6 +6,21 @@ extension EnvironmentValues {
     @Entry var sceneFrame: CGRect = .zero
 }
 
+/// The light rests while you write: as soon as you type, a drifting scene fades to a faint,
+/// almost colorless tint, and it blooms back slowly once you pause.
+struct LightRest: ViewModifier {
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        let theme = model.prefs.theme
+        let resting = theme.atmosphere.drifts && model.isTyping
+        content
+            .saturation(resting ? 0.25 : 1)
+            .overlay(theme.bg.opacity(resting ? (theme.isDark ? 0.7 : 0.6) : 0).allowsHitTesting(false))
+            .animation(.easeInOut(duration: resting ? 1 : 3), value: resting)
+    }
+}
+
 /// The scene behind everything: a soft gradient plus, for a few themes, a quiet layer of
 /// stars, ink or digital rain. Every particle is a pure function of time,
 /// so nothing is stored and the scene is identical however often it's redrawn.
@@ -198,11 +213,11 @@ private struct AtmosphereRenderer {
         var c = g
         c.blendMode = theme.isDark ? .plusLighter : .normal
         for i in 0..<colors.count {
-            let x = W * (0.5 + 0.48 * sin(t * (0.021 + r(i, 1) * 0.025) + r(i, 2) * 6.28))
-            let y = H * (0.5 + 0.44 * cos(t * (0.017 + r(i, 3) * 0.022) + r(i, 4) * 6.28))
+            let x = W * (0.5 + 0.48 * sin(t * (0.0105 + r(i, 1) * 0.0125) + r(i, 2) * 6.28))
+            let y = H * (0.5 + 0.44 * cos(t * (0.0085 + r(i, 3) * 0.011) + r(i, 4) * 6.28))
             // Each pool slowly breathes as well as wanders.
-            let radius = span * (0.32 + r(i, 5) * 0.22) * (1 + 0.12 * sin(t * 0.05 + Double(i)))
-            let strength = theme.isDark ? (i < 3 ? 0.62 : 0.4) : (i < 3 ? 0.75 : 0.6)
+            let radius = span * (0.32 + r(i, 5) * 0.22) * (1 + 0.12 * sin(t * 0.025 + Double(i)))
+            let strength = theme.isDark ? (i < 3 ? 0.42 : 0.28) : (i < 3 ? 0.55 : 0.42)
             c.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)),
                    with: .radialGradient(Gradient(stops: [
                        .init(color: colors[i].opacity(strength), location: 0),
