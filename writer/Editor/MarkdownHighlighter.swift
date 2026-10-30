@@ -61,12 +61,26 @@ final class MarkdownHighlighter {
         return NSFont(descriptor: descriptor, size: size) ?? base
     }
 
+    /// Line height means what it does on the web: a multiple of the font size, so the page
+    /// and the preview breathe alike. A fixed height also keeps lines even when a glyph like
+    /// ⌘ or an emoji falls back to a taller font.
     var paragraphStyle: NSParagraphStyle {
         let style = NSMutableParagraphStyle()
-        style.lineHeightMultiple = lineHeight
+        style.minimumLineHeight = (fontSize * lineHeight).rounded()
+        style.maximumLineHeight = style.minimumLineHeight
         style.paragraphSpacing = fontSize * 0.25
         return style
     }
+
+    /// The empty line between blocks: half a line, so Markdown's blank lines read as a
+    /// paragraph break rather than a gap.
+    private var blankLineStyle: NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = (fontSize * 0.9).rounded()
+        style.maximumLineHeight = style.minimumLineHeight
+        return style
+    }
+    private static let blankLine = regex("^[ \\t]*$\\n?")
 
     var baseAttributes: [NSAttributedString.Key: Any] {
         [.font: font(), .foregroundColor: theme.text, .paragraphStyle: paragraphStyle]
@@ -165,11 +179,17 @@ final class MarkdownHighlighter {
             }
         }
 
+        each(Self.blankLine) { m in
+            guard m.range.length > 0 else { return }
+            storage.addAttribute(.paragraphStyle, value: blankLineStyle, range: m.range)
+        }
+
         if plain {
             // Plain Markdown: every character exactly as typed, in one font and size.
             draftingMarks()
             storage.endEditing()
             storage.fixAttributes(in: range)
+            evenOutFallbackFonts(storage, in: range)
             return
         }
 
@@ -184,6 +204,8 @@ final class MarkdownHighlighter {
             let indent = (prefix as NSString).size(withAttributes: [.font: font()]).width
             let style = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
             style.headIndent = indent
+            // Items of one list read as a set, closer together than paragraphs.
+            style.paragraphSpacing = fontSize * 0.1
             storage.addAttribute(.paragraphStyle, value: style, range: ns.paragraphRange(for: m.range))
         }
         each(Self.taskDone) { m in
@@ -244,10 +266,16 @@ final class MarkdownHighlighter {
         each(Self.heading) { m in
             let level = m.range(at: 1).length
             let scale: [CGFloat] = [1.75, 1.4, 1.2, 1.08, 1, 1]
-            storage.addAttributes([.font: font(size: fontSize * scale[level - 1], bold: true), .foregroundColor: theme.heading], range: m.range)
+            let size = fontSize * scale[level - 1]
+            storage.addAttributes([.font: font(size: size, bold: true), .foregroundColor: theme.heading,
+                                   .kern: level <= 2 ? -size * 0.012 : 0], range: m.range)
             markup(NSRange(location: m.range.location, length: m.range(at: 2).location - m.range.location))
+            // Headings sit close to the text they introduce and well clear of what came before.
             let style = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
-            style.paragraphSpacingBefore = level <= 2 ? fontSize * 0.3 : 0
+            style.minimumLineHeight = (size * 1.25).rounded()
+            style.maximumLineHeight = style.minimumLineHeight
+            style.paragraphSpacingBefore = fontSize * (level == 1 ? 0.6 : level == 2 ? 1.0 : 0.6)
+            style.paragraphSpacing = fontSize * 0.1
             storage.addAttribute(.paragraphStyle, value: style, range: m.range)
         }
         each(Self.rule) { m in color(m.range, muted) }
@@ -291,13 +319,33 @@ final class MarkdownHighlighter {
         let full = NSRange(location: 0, length: ns.length)
         Self.fence.enumerateMatches(in: string, range: full) { m, _, _ in
             guard let m, NSIntersectionRange(m.range, range).length > 0 else { return }
+            // Code keeps every line, blank ones included, at one even height.
+            let code = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
+            code.paragraphSpacing = 0
             storage.addAttributes([.font: font(mono: true), .foregroundColor: theme.text.withAlphaComponent(0.85),
-                                   .backgroundColor: theme.codeBackground], range: m.range)
+                                   .backgroundColor: theme.codeBackground, .paragraphStyle: code], range: m.range)
             storage.removeAttribute(.strikethroughStyle, range: m.range)
             storage.removeAttribute(.underlineStyle, range: m.range)
         }
         // Restore fallback fonts for glyphs the chosen font lacks (e.g. ⌘, emoji).
         storage.fixAttributes(in: range)
+        evenOutFallbackFonts(storage, in: range)
+    }
+
+    /// The serif has no ⌘ or ⇧, and macOS falls back to Hiragino for them, whose tall metrics
+    /// push that line taller than its neighbors. San Francisco has those keys, so it stands in
+    /// wherever it can, and every line keeps the same height.
+    private func evenOutFallbackFonts(_ storage: NSTextStorage, in range: NSRange) {
+        let ns = storage.string as NSString
+        storage.enumerateAttribute(.font, in: range) { value, run, _ in
+            guard let font = value as? NSFont, font.leading > 0, font.pointSize > 1 else { return }
+            let bold = font.fontDescriptor.symbolicTraits.contains(.bold)
+            let system = NSFont.systemFont(ofSize: font.pointSize, weight: bold ? .bold : .regular)
+            let chars = Array(ns.substring(with: run).utf16)
+            var glyphs = [CGGlyph](repeating: 0, count: chars.count)
+            guard CTFontGetGlyphsForCharacters(system, chars, &glyphs, chars.count) else { return }
+            storage.addAttribute(.font, value: system, range: run)
+        }
     }
 
     private func addTraits(_ storage: NSTextStorage, _ range: NSRange, bold: Bool = false, italic: Bool = false) {

@@ -341,7 +341,7 @@ private struct SheetRow: View {
             HStack(spacing: 5) {
                 Text(sheet.modified, format: .relative(presentation: .named))
                 Text("·")
-                Text("\(sheet.words.formatted()) words")
+                Text(sheet.words == 1 ? "1 word" : "\(sheet.words.formatted()) words")
             }
             .font(.caption)
             .foregroundStyle(.tertiary)

@@ -117,6 +117,7 @@ private struct GoalsPane: View {
                     ForEach([5, 15, 25, 45], id: \.self) { minutes in
                         Button("\(minutes)m") { model.startSprint(minutes: minutes) }
                             .buttonStyle(.glass)
+                            .tint(nil)
                     }
                 }
             }

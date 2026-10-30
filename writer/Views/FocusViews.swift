@@ -7,7 +7,7 @@ struct PomodoroChip: View {
 
     var body: some View {
         let pomodoro = model.pomodoro
-        let tint: Color = pomodoro.phase.isBreak ? .green : .red
+        let tint = pomodoro.phase.isBreak ? model.prefs.theme.leafColor : model.prefs.theme.accentColor
         if pomodoro.isActive {
             // A plain button with a popover: stable to click, even while the countdown ticks.
             Button { showingControls.toggle() } label: {
@@ -41,7 +41,7 @@ struct PomodoroChip: View {
                 Label("Focus \(model.prefs.pomodoroWork)m", systemImage: "timer")
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.red)
+            .foregroundStyle(model.prefs.theme.accentColor)
             .help("Start a \(model.prefs.pomodoroWork)-minute focus session (⌥⌘P)")
         }
     }
@@ -71,7 +71,7 @@ struct PomodoroControls: View {
 
     var body: some View {
         let pomodoro = model.pomodoro
-        let tint: Color = pomodoro.phase.isBreak ? .green : .red
+        let tint = pomodoro.phase.isBreak ? model.prefs.theme.leafColor : model.prefs.theme.accentColor
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Label(pomodoro.phase.label, systemImage: pomodoro.phase.isBreak ? "cup.and.saucer.fill" : "timer")
@@ -200,30 +200,39 @@ struct ImmersiveHint: View {
 
 /// Write | Split | Preview, always visible in the toolbar.
 /// Clicking Side by Side or Preview again goes back to writing, like a toggle.
-struct ViewModePicker: View {
+/// One Preview button: click for the reader's view of the post, ⌥-click (or its menu) to see
+/// it beside the page. In a book, the useful preview is the printed spread, so it opens that.
+struct PreviewButton: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let accent = model.prefs.theme.accentColor
-        HStack(spacing: 2) {
-            ForEach(PreviewMode.allCases) { mode in
-                let active = model.previewMode == mode
-                Button {
-                    model.setPreview(active && mode != .off ? .off : mode)
-                } label: {
-                    Image(systemName: mode.symbol)
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 30, height: 24)
-                        .foregroundStyle(active ? accent : Color.primary)
-                        .background(active ? accent.opacity(0.18) : .clear, in: .capsule)
-                        .contentShape(.capsule)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(mode.label)
-                .help(active && mode != .off ? "Close \(mode.label) (⌘⇧P)" : mode.label)
+        if let book = model.currentBook {
+            Button { model.compileFolder = book } label: {
+                Label("Book Preview", systemImage: "book.pages")
             }
+            .help("See the book as printed pages, two at a time")
+        } else {
+            let previewing = model.previewMode != .off
+            Menu {
+                Button("Reader Preview") { model.setPreview(.full) }
+                Button("Side by Side") { model.setPreview(.split) }
+                if previewing {
+                    Divider()
+                    Button("Back to Writing") { model.setPreview(.off) }
+                }
+            } label: {
+                Label("Preview", systemImage: previewing ? "eye.fill" : "eye")
+            } primaryAction: {
+                if previewing {
+                    model.setPreview(.off)
+                } else {
+                    model.setPreview(NSEvent.modifierFlags.contains(.option) ? .split : .full)
+                }
+            }
+            .tint(previewing ? accent : nil)
+            .help(previewing ? "Back to writing (⌘⇧P)" : "How readers will see this post. ⌥-click to see it beside the page.")
         }
-        .padding(.horizontal, 2)
     }
 }
 

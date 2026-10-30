@@ -8,17 +8,21 @@ private struct FormatButton: View {
     var active = false
     let action: () -> Void
     @Environment(AppModel.self) private var model
+    @State private var hovering = false
 
     var body: some View {
+        let accent = model.prefs.theme.accentColor
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13, weight: active ? .bold : .medium))
                 .frame(width: 28, height: 26)
-                .foregroundStyle(active ? Color.white : Color.primary)
-                .background(active ? model.prefs.theme.accentColor : .clear, in: .rect(cornerRadius: 7))
+                .foregroundStyle(active ? accent : Color.primary.opacity(hovering ? 1 : 0.78))
+                .background(active ? accent.opacity(0.16) : Color.primary.opacity(hovering ? 0.07 : 0), in: .rect(cornerRadius: 7))
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .help(help)
     }
 }
@@ -40,9 +44,15 @@ struct FormatBar: View {
                 Button("Body") { model.format(.paragraph) }
                 Button("Quote") { model.format(.quote) }
             } label: {
-                Text(blockLabel(state.block))
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 84, alignment: .leading)
+                HStack(spacing: 4) {
+                    Text(blockLabel(state.block))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 84)
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -202,18 +212,19 @@ struct SlashMenuView: View {
                         let selected = index == state.selected
                         HStack(spacing: 10) {
                             Image(systemName: item.symbol)
+                                .foregroundStyle(selected ? accent : Color.secondary)
                                 .frame(width: 30, height: 30)
-                                .background(.quaternary, in: .rect(cornerRadius: 7))
+                                .background(selected ? accent.opacity(0.14) : Color.primary.opacity(0.06), in: .rect(cornerRadius: 7))
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(item.title).font(.system(size: 13, weight: .medium))
-                                Text(item.subtitle).font(.caption).foregroundStyle(selected ? .white.opacity(0.85) : .secondary)
+                                Text(item.subtitle).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                         }
-                        .foregroundStyle(selected ? Color.white : Color.primary)
+                        .foregroundStyle(Color.primary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(selected ? accent : .clear, in: .rect(cornerRadius: 9))
+                        .background(selected ? Color.primary.opacity(0.08) : .clear, in: .rect(cornerRadius: 9))
                         .contentShape(.rect)
                         .id(index)
                         .onTapGesture { choose(index) }

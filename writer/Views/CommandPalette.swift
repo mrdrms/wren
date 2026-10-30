@@ -81,25 +81,33 @@ struct CommandPalette: View {
     }
 
     private func row(_ item: PaletteItem, selected: Bool) -> some View {
-        HStack(spacing: 12) {
+        let accent = model.prefs.theme.accentColor
+        return HStack(spacing: 12) {
             Image(systemName: item.symbol)
-                .frame(width: 22)
-                .foregroundStyle(selected ? .white : model.prefs.theme.accentColor)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 28, height: 28)
+                .foregroundStyle(selected ? accent : Color.secondary)
+                .background(selected ? accent.opacity(0.14) : Color.primary.opacity(0.05), in: .rect(cornerRadius: 7))
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title).lineLimit(1)
                 if let subtitle = item.subtitle {
-                    Text(subtitle).font(.caption).lineLimit(1).opacity(0.7)
+                    Text(subtitle).font(.caption).lineLimit(1).foregroundStyle(.secondary)
                 }
             }
             Spacer()
             if let shortcut = item.shortcut {
-                Text(shortcut).font(.callout.monospaced()).opacity(0.6)
+                Text(shortcut)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(selected ? 0.08 : 0.04), in: .rect(cornerRadius: 5))
             }
         }
-        .foregroundStyle(selected ? .white : .primary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(selected ? model.prefs.theme.accentColor : .clear, in: .rect(cornerRadius: 10))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(selected ? Color.primary.opacity(0.08) : .clear, in: .rect(cornerRadius: 10))
         .contentShape(.rect)
     }
 
@@ -116,7 +124,7 @@ struct CommandPalette: View {
 
     private var filtered: [PaletteItem] {
         let all = commands + model.library.sheets.map { sheet in
-            PaletteItem(id: sheet.url.path, title: sheet.title, subtitle: "\(sheet.folder.lastPathComponent) · \(sheet.words) words",
+            PaletteItem(id: sheet.url.path, title: sheet.title, subtitle: "\(sheet.folder.lastPathComponent) · \(sheet.words == 1 ? "1 word" : "\(sheet.words.formatted()) words")",
                         symbol: "doc.text", shortcut: nil) { [model] in
                 model.sidebarSelection = .all
                 model.searchText = ""

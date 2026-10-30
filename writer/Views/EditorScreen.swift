@@ -38,6 +38,8 @@ struct EditorScreen: View {
             }
         }
         .navigationTitle(model.zen ? "" : model.currentTitle)
+        // The page runs up under the title bar, so the window reads as one sheet of paper.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
@@ -59,7 +61,7 @@ struct EditorScreen: View {
             }
             ToolbarSpacer(.fixed)
             ToolbarItem(placement: .primaryAction) {
-                ViewModePicker()
+                PreviewButton()
             }
             ToolbarSpacer(.fixed)
             ToolbarItemGroup(placement: .primaryAction) {
@@ -110,6 +112,7 @@ struct ToolsMenu: View {
         } label: {
             Label("Tools", systemImage: "wand.and.stars")
         }
+        .menuIndicator(.hidden)
         .tint(active ? prefs.theme.accentColor : nil)
         .help("Flow Lock, Storyboard, Style Lens, Rhythm, Read Aloud, Time Machine and more")
     }

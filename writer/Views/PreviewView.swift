@@ -49,6 +49,11 @@ struct PreviewPane: View {
             }
 
             HStack(spacing: 10) {
+                // This isn't a second way to see formatting: it's the post as readers get it.
+                Label("Reader preview", systemImage: "eye")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
                 if model.previewMode == .full {
                     Button { model.setPreview(.off) } label: {
                         Label("Write", systemImage: "pencil")

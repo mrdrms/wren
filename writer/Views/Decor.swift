@@ -44,10 +44,12 @@ struct GoalRing: View {
     var body: some View {
         ZStack {
             Circle().stroke(tint.opacity(0.18), lineWidth: lineWidth)
+            // Nothing yet means an empty track, not a stray dot at twelve o'clock.
             Circle()
                 .trim(from: 0, to: max(0.001, progress))
                 .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .opacity(progress > 0 ? 1 : 0)
             if progress >= 1 {
                 Image(systemName: "checkmark")
                     .font(.system(size: lineWidth * 2.4, weight: .heavy))
