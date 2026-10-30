@@ -171,6 +171,7 @@ enum SlashCatalog {
         SlashItem(id: "task", title: "Checklist", subtitle: "Things to tick off", symbol: "checklist", keywords: "todo task check checkbox") { $0.format(.task) },
         SlashItem(id: "quote", title: "Quote", subtitle: "Pull out a quotation", symbol: "text.quote", keywords: "quote blockquote citation") { $0.format(.quote) },
         SlashItem(id: "image", title: "Image or video", subtitle: "From your Mac", symbol: "photo.on.rectangle", keywords: "image picture photo video media upload file") { $0.insertMediaWithPanel() },
+        SlashItem(id: "drawing", title: "Drawing", subtitle: "Sketch with pen, brush or marker", symbol: "scribble.variable", keywords: "drawing sketch draw pen pencil diagram doodle") { $0.newDrawing() },
         SlashItem(id: "youtube", title: "YouTube video", subtitle: "Embed by link", symbol: "play.rectangle", keywords: "youtube video embed") { $0.beginVideoEmbed() },
         SlashItem(id: "link", title: "Link", subtitle: "Link to a web page", symbol: "link", keywords: "link url web") { $0.beginLink() },
         SlashItem(id: "divider", title: "Divider", subtitle: "A break between sections", symbol: "minus", keywords: "divider line separator rule hr break") { $0.format(.divider) },
@@ -180,7 +181,7 @@ enum SlashCatalog {
     ]
 
     static var insertables: [SlashItem] {
-        let ids = ["image", "youtube", "link", "divider", "code", "note", "post"]
+        let ids = ["image", "drawing", "youtube", "link", "divider", "code", "note", "post"]
         return ids.compactMap { id in all.first { $0.id == id } }
     }
 

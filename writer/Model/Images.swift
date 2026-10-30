@@ -64,6 +64,58 @@ nonisolated enum MarkdownImage {
         }
     }
 
+    // MARK: Sizes
+
+    /// A width written at the end of the alt text, the way Obsidian does it:
+    /// `![Sketch|60%](…)` is 60% of the column, `![Sketch|300](…)` is 300 points.
+    /// Apps that don't know the convention simply show the picture at its usual size.
+    enum Width: Equatable {
+        case percent(Int)
+        case points(Int)
+
+        /// How wide this is in a column of the given width.
+        func resolved(in column: Double) -> Double {
+            switch self {
+            case .percent(let p): column * Double(p) / 100
+            case .points(let p): min(column, Double(p))
+            }
+        }
+    }
+
+    private static let sizeSuffix = try! NSRegularExpression(pattern: #"^(.*?)\|\s*(\d{1,4})\s*(%?)\s*$"#, options: .dotMatchesLineSeparators)
+
+    /// The caption and the width, from alt text that may end in `|60%` or `|300`.
+    static func split(alt: String) -> (caption: String, width: Width?) {
+        let ns = alt as NSString
+        guard let m = sizeSuffix.firstMatch(in: alt, range: NSRange(location: 0, length: ns.length)),
+              let number = Int(ns.substring(with: m.range(at: 2))), number > 0 else { return (alt, nil) }
+        let caption = ns.substring(with: m.range(at: 1))
+        if m.range(at: 3).length > 0 { return (caption, .percent(min(100, max(5, number)))) }
+        return (caption, .points(number))
+    }
+
+    /// Alt text carrying a width (or none, to go back to the natural size).
+    static func alt(caption: String, width: Width?) -> String {
+        switch width {
+        case .percent(let p): "\(caption)|\(p)%"
+        case .points(let p): "\(caption)|\(p)"
+        case nil: caption
+        }
+    }
+
+    /// The same Markdown with every size marker removed, for places that take raw Markdown
+    /// and wouldn't understand it.
+    static func withoutSizes(_ text: String) -> String {
+        guard text.contains("![") else { return text }
+        let result = NSMutableString(string: text)
+        for m in anyRegex.matches(in: text, range: NSRange(location: 0, length: result.length)).reversed() {
+            let alt = result.substring(with: m.range(at: 1))
+            let (caption, width) = split(alt: alt)
+            if width != nil { result.replaceCharacters(in: m.range(at: 1), with: caption) }
+        }
+        return result as String
+    }
+
     /// Image markup removed, so alt text and file names don't count as words.
     static func stripForCounting(_ text: String) -> String {
         guard text.contains("![") else { return text }

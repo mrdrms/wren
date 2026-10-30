@@ -93,11 +93,17 @@ struct ContentView: View {
         }
         .overlay {
             if ritual && !reduceMotion {
-                LaunchRitual(theme: theme) {
+                LaunchRitual {
                     withAnimation(.easeInOut(duration: 0.7)) { ritual = false }
                 }
                 .transition(.opacity)
             }
+        }
+        .sheet(item: $model.drawingSession) { session in
+            DrawingStudio(drawing: session.drawing, isNew: session.image == nil,
+                          onCancel: { model.drawingSession = nil },
+                          onDone: { model.finishDrawing(session, $0) })
+                .interactiveDismissDisabled()
         }
         .sheet(isPresented: $model.showJourney) { JourneyView() }
         .sheet(isPresented: $model.showTimeMachine) { TimeMachineView() }

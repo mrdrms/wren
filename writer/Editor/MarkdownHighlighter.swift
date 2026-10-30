@@ -14,7 +14,7 @@ final class MarkdownHighlighter {
     var fontSize: CGFloat = 18
     var lineHeight: CGFloat = 1.6
     /// Preview size for an image path, so its line can reserve room beneath it.
-    var imageSize: ((String) -> NSSize?)?
+    var imageSize: ((_ path: String, _ alt: String) -> NSSize?)?
     /// Show Markdown as typed, with no rendering (the preview shows the result).
     var plain = true
     /// Hide markup characters outside `revealRange` (live formatting only).
@@ -295,7 +295,7 @@ final class MarkdownHighlighter {
             storage.removeAttribute(.underlineStyle, range: m.range)
             // Hidden markup: the picture itself is the content; its code appears when you click in.
             if !revealed(m.range) { markup(m.range) }
-            if let size = imageSize?(ns.substring(with: m.range(at: 2))) {
+            if let size = imageSize?(ns.substring(with: m.range(at: 2)), ns.substring(with: m.range(at: 1))) {
                 let style = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
                 style.paragraphSpacing = size.height + 24
                 storage.addAttribute(.paragraphStyle, value: style, range: ns.paragraphRange(for: m.range))

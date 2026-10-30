@@ -22,7 +22,6 @@ struct Seal: View {
 /// The first few seconds of every session: an ensō brushed onto washi, the seal pressed
 /// beside it, the name, then the page. A click skips it.
 struct LaunchRitual: View {
-    let theme: Theme
     let finish: () -> Void
     @State private var stamped = false
     @State private var named = false

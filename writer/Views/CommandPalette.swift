@@ -190,6 +190,7 @@ struct CommandPalette: View {
             PaletteItem(id: "numbered", title: "Numbered List", subtitle: nil, symbol: "list.number", shortcut: "⇧⌘7") { m.format(.numbered) },
             PaletteItem(id: "bulleted", title: "Bulleted List", subtitle: nil, symbol: "list.bullet", shortcut: "⇧⌘8") { m.format(.bullet) },
             PaletteItem(id: "addlink", title: "Add Link…", subtitle: nil, symbol: "link", shortcut: "⌘L") { m.beginLink() },
+            PaletteItem(id: "drawing", title: "New Drawing…", subtitle: "Sketch right into this sheet", symbol: "scribble.variable", shortcut: nil) { m.newDrawing() },
             PaletteItem(id: "youtube", title: "Embed YouTube Video…", subtitle: nil, symbol: "play.rectangle", shortcut: nil) { m.beginVideoEmbed() },
             PaletteItem(id: "postdetails", title: "Add Post Details", subtitle: "Title and date for your blog", symbol: "doc.badge.gearshape", shortcut: nil) { m.insertPostDetails() },
             PaletteItem(id: "media", title: "Insert Image or Video…", subtitle: "Or just drag, drop or paste it into the page", symbol: "photo.on.rectangle", shortcut: "⇧⌘I") { m.insertMediaWithPanel() },

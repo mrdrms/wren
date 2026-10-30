@@ -70,7 +70,8 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.onDecorationsNeeded = { [weak coordinator = context.coordinator] in coordinator?.updateDecorations() }
         textView.onImportImages = { [weak model] in model?.importImages($0) ?? [] }
         textView.onImagesNeedRestyle = { [weak coordinator = context.coordinator] in coordinator?.restyleForImages() }
-        context.coordinator.highlighter.imageSize = { [weak textView] in textView?.previewSize(forPath: $0) }
+        textView.onEditDrawing = { [weak model] in model?.editDrawing($0) }
+        context.coordinator.highlighter.imageSize = { [weak textView] in textView?.previewSize(forPath: $0, alt: $1) }
         textView.commandInterceptor = { [weak coordinator = context.coordinator] in coordinator?.interceptCommand($0) ?? false }
         model.editor = textView
         return scrollView
@@ -546,8 +547,11 @@ struct MarkdownEditor: NSViewRepresentable {
             guard model.prefs.wetInk, added > 0, added <= 4, caret >= added else { return }
             wetInk.append((NSRange(location: caret - added, length: added), .now))
             if inkTimer == nil {
-                inkTimer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.dryInk() }
+                inkTimer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] timer in
+                    MainActor.assumeIsolated {
+                        guard let self else { return timer.invalidate() }
+                        self.dryInk()
+                    }
                 }
             }
         }
@@ -572,7 +576,12 @@ struct MarkdownEditor: NSViewRepresentable {
         }
 
         private func dryInk() {
-            guard let textView, let layout = textView.layoutManager else { return }
+            guard let textView, let layout = textView.layoutManager else {
+                wetInk = []
+                inkTimer?.invalidate()
+                inkTimer = nil
+                return
+            }
             let length = (textView.string as NSString).length
             let now = Date.now
             let dried = wetInk.filter { now.timeIntervalSince($0.born) >= Self.inkDrying }

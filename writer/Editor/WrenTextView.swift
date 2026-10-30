@@ -26,6 +26,8 @@ final class WrenTextView: NSTextView {
     }
     var onImportImages: (([ImageSource]) -> [String])?
     var onImagesNeedRestyle: (() -> Void)?
+    /// Double-clicking a drawing's picture opens it in the studio.
+    var onEditDrawing: ((URL) -> Void)?
     private var imageViews: [PreviewImageView] = []
     private var suppressCutCapture = false
 
@@ -201,14 +203,18 @@ final class WrenTextView: NSTextView {
         return ImagePreviewCache.shared.image(for: url) { [weak self] in self?.onImagesNeedRestyle?() }
     }
 
-    /// Display size for a preview: natural size fitted to the text column and a max height.
-    /// YouTube embeds reserve a 16:9 frame straight away.
-    func previewSize(forPath path: String) -> NSSize? {
-        let column = max(160, textContainer?.size.width ?? lineWidth)
+    /// The width media can grow to: the text column.
+    var mediaColumn: CGFloat { max(160, textContainer?.size.width ?? lineWidth) }
+
+    /// Display size for a preview: a width chosen in the alt text (`|60%`), or the natural
+    /// size fitted to the text column and a max height. YouTube embeds are always 16:9.
+    func previewSize(forPath path: String, alt: String = "") -> NSSize? {
+        let column = mediaColumn
+        let chosen = MarkdownImage.split(alt: alt).width.map { CGFloat($0.resolved(in: Double(column))) }
         var size: NSSize
         switch MarkdownImage.kind(of: path) {
         case .youtube:
-            let width = min(column, 640)
+            let width = chosen ?? min(column, 640)
             return NSSize(width: width.rounded(), height: (width * 9 / 16).rounded())
         case .video:
             guard let url = MarkdownImage.resolve(path, relativeTo: imageFolder),
@@ -218,6 +224,9 @@ final class WrenTextView: NSTextView {
         case .image:
             guard let image = previewImage(forPath: path) else { return nil }
             size = image.size
+        }
+        if let chosen, size.width > 0 {
+            return NSSize(width: chosen.rounded(), height: (chosen * size.height / size.width).rounded())
         }
         if size.width > column { size = NSSize(width: column, height: size.height * column / size.width) }
         if size.height > 460 { size = NSSize(width: size.width * 460 / size.height, height: 460) }
@@ -230,11 +239,13 @@ final class WrenTextView: NSTextView {
         guard let layout = layoutManager else { return }
         let ns = string as NSString
         var usedImages = 0
+        var usedHandles = 0
         var liveVideos = Set<URL>()
         if showsMediaPreviews, ns.range(of: "![").location != NSNotFound {
             for m in MarkdownImage.lineRegex.matches(in: string, range: NSRange(location: 0, length: ns.length)) {
                 let path = ns.substring(with: m.range(at: 2))
-                guard let size = previewSize(forPath: path) else { continue }
+                let alt = ns.substring(with: m.range(at: 1))
+                guard let size = previewSize(forPath: path, alt: alt) else { continue }
                 let glyphs = layout.glyphRange(forCharacterRange: m.range, actualCharacterRange: nil)
                 guard glyphs.length > 0 else { continue }
                 let line = layout.lineFragmentUsedRect(forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil)
@@ -247,11 +258,12 @@ final class WrenTextView: NSTextView {
                     if player.frame != frame { player.frame = frame }
                     player.isHidden = false
                     liveVideos.insert(url)
+                    placeResizeHandle(&usedHandles, media: player, frame: frame, altRange: m.range(at: 1), alt: alt)
                     continue
                 }
                 if usedImages == imageViews.count {
                     let view = PreviewImageView()
-                    addSubview(view)
+                    addMediaSubview(view)
                     imageViews.append(view)
                 }
                 let view = imageViews[usedImages]
@@ -261,13 +273,22 @@ final class WrenTextView: NSTextView {
                 } else {
                     view.link = nil
                 }
+                // A drawing with its strokes beside it can be opened again and edited.
+                if kind == .image, let onEditDrawing, let url = MarkdownImage.resolve(path, relativeTo: imageFolder),
+                   DrawingFiles.isEditable(url) {
+                    view.edit = { onEditDrawing(url) }
+                } else {
+                    view.edit = nil
+                }
                 if view.frame != frame { view.frame = frame }
                 view.isHidden = false
-                view.toolTip = view.link == nil ? path : "Open on YouTube"
+                view.toolTip = view.link != nil ? "Open on YouTube" : view.edit != nil ? "Double-click to edit this drawing" : path
                 usedImages += 1
+                placeResizeHandle(&usedHandles, media: view, frame: frame, altRange: m.range(at: 1), alt: alt)
             }
         }
-        for view in imageViews[usedImages...] { view.isHidden = true; view.image = nil }
+        for view in imageViews[usedImages...] { view.isHidden = true; view.image = nil; view.edit = nil }
+        for handle in resizeHandles[usedHandles...] { handle.isHidden = true; handle.media = nil; handle.commit = nil }
         for (url, player) in videoViews where !liveVideos.contains(url) {
             player.player?.pause()
             player.removeFromSuperview()
@@ -276,6 +297,31 @@ final class WrenTextView: NSTextView {
     }
 
     private var videoViews: [URL: AVPlayerView] = [:]
+    private var resizeHandles: [MediaResizeHandle] = []
+
+    /// A corner grip over a picture or video: drag it to choose the width, written back into
+    /// the Markdown as a percentage of the column so it looks the same on every screen.
+    private func placeResizeHandle(_ used: inout Int, media: NSView, frame: NSRect, altRange: NSRange, alt: String) {
+        if used == resizeHandles.count {
+            let handle = MediaResizeHandle()
+            resizeHandles.append(handle)
+        }
+        let handle = resizeHandles[used]
+        used += 1
+        if handle.superview !== self { addSubview(handle) }
+        handle.media = media
+        handle.mediaFrame = frame
+        handle.column = mediaColumn
+        handle.isHidden = false
+        handle.commit = { [weak self] percent in
+            guard let self else { return }
+            let ns = self.string as NSString
+            // Only if the Markdown is still the one this handle was laid out for.
+            guard NSMaxRange(altRange) <= ns.length, ns.substring(with: altRange) == alt else { return }
+            let caption = MarkdownImage.split(alt: alt).caption
+            self.replace(altRange, with: MarkdownImage.alt(caption: caption, width: .percent(percent)))
+        }
+    }
 
     private func makeVideoView(_ url: URL) -> AVPlayerView {
         let view = AVPlayerView()
@@ -285,8 +331,17 @@ final class WrenTextView: NSTextView {
         view.wantsLayer = true
         view.layer?.cornerRadius = 10
         view.layer?.masksToBounds = true
-        addSubview(view)
+        addMediaSubview(view)
         return view
+    }
+
+    /// Pictures and videos go beneath the resize grips, so a grip is never covered.
+    private func addMediaSubview(_ view: NSView) {
+        if let grip = resizeHandles.first(where: { $0.superview === self }) {
+            addSubview(view, positioned: .below, relativeTo: grip)
+        } else {
+            addSubview(view)
+        }
     }
 
     /// One bar per sentence in the left margin; its length is the sentence's word count.
@@ -561,7 +616,15 @@ final class PreviewImageView: NSView {
     var link: URL? {
         didSet { badge.isHidden = link == nil }
     }
+    /// Set for drawings: a double-click opens them in the studio.
+    var edit: (() -> Void)? {
+        didSet {
+            if (edit == nil) != (oldValue == nil) { window?.invalidateCursorRects(for: self) }
+            if edit == nil { pencil.isHidden = true }
+        }
+    }
     private let badge = NSImageView()
+    private let pencil = NSImageView()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -575,6 +638,12 @@ final class PreviewImageView: NSView {
         badge.image = NSImage(systemSymbolName: "play.circle.fill", accessibilityDescription: "Play")?.withSymbolConfiguration(config)
         badge.isHidden = true
         addSubview(badge)
+        pencil.image = NSImage(systemSymbolName: "pencil.tip.crop.circle.fill", accessibilityDescription: "Edit drawing")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+                .applying(.init(paletteColors: [.white, NSColor.black.withAlphaComponent(0.55)])))
+        pencil.isHidden = true
+        addSubview(pencil)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -582,17 +651,167 @@ final class PreviewImageView: NSView {
     override func layout() {
         super.layout()
         badge.frame = NSRect(x: bounds.midX - 34, y: bounds.midY - 34, width: 68, height: 68)
+        pencil.frame = NSRect(x: bounds.maxX - 36, y: bounds.maxY - 36, width: 28, height: 28)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        link == nil ? nil : (frame.contains(point) ? self : nil)
+        link == nil && edit == nil ? nil : (frame.contains(point) ? self : nil)
     }
 
     override func resetCursorRects() {
-        if link != nil { addCursorRect(bounds, cursor: .pointingHand) }
+        if link != nil || edit != nil { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        pencil.isHidden = edit == nil
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        pencil.isHidden = true
     }
 
     override func mouseDown(with event: NSEvent) {
-        if let link { NSWorkspace.shared.open(link) }
+        if let link {
+            NSWorkspace.shared.open(link)
+        } else if let edit, event.clickCount == 2 {
+            edit()
+        } else {
+            // A single click on a drawing still places the caret, as it does on any picture.
+            superview?.mouseDown(with: event)
+        }
+    }
+}
+
+/// The resize grip for one picture or video. It covers the whole column beside the media
+/// (so the grip can be dragged wider than the picture is now) but only the grip itself takes
+/// clicks; everything else passes through to the text.
+final class MediaResizeHandle: NSView {
+    weak var media: NSView?
+    var mediaFrame: NSRect = .zero { didSet { if !dragging { layoutForMedia() } } }
+    var column: CGFloat = 600 { didSet { if !dragging { layoutForMedia() } } }
+    var commit: ((Int) -> Void)?
+
+    private var hovering = false
+    private var dragging = false
+    private var dragStart: NSPoint = .zero
+    private var startWidth: CGFloat = 0
+    private var liveWidth: CGFloat = 0
+    private var tracking: NSTrackingArea?
+    private static let grip: CGFloat = 22
+
+    override var isFlipped: Bool { true }
+
+    private var aspect: CGFloat { mediaFrame.width > 0 ? mediaFrame.height / mediaFrame.width : 1 }
+    private var currentWidth: CGFloat { dragging ? liveWidth : mediaFrame.width }
+    private var gripRect: NSRect {
+        NSRect(x: currentWidth - Self.grip + 6, y: currentWidth * aspect - Self.grip + 6, width: Self.grip, height: Self.grip)
+    }
+
+    private func layoutForMedia() {
+        frame = NSRect(x: mediaFrame.minX, y: mediaFrame.minY, width: max(column, mediaFrame.width) + 8,
+                       height: max(column, mediaFrame.width) * aspect + 8)
+        updateTracking()
+        needsDisplay = true
+    }
+
+    private func updateTracking() {
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: NSRect(x: 0, y: 0, width: mediaFrame.width + 8, height: mediaFrame.height + 8),
+                                  options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, hovering || dragging else { return nil }
+        return gripRect.contains(convert(point, from: superview)) ? self : nil
+    }
+
+    override func resetCursorRects() {
+        if hovering { addCursorRect(gripRect, cursor: .frameResize(position: .bottomRight, directions: .all)) }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        dragging = true
+        dragStart = convert(event.locationInWindow, from: nil)
+        startWidth = mediaFrame.width
+        liveWidth = startWidth
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        // Follow whichever way the pointer moved further, so the corner tracks it.
+        let byWidth = startWidth + (point.x - dragStart.x)
+        let byHeight = startWidth + (point.y - dragStart.y) / max(aspect, 0.01)
+        liveWidth = min(column, max(column * 0.1, abs(point.x - dragStart.x) > abs(point.y - dragStart.y) ? byWidth : byHeight))
+        if let media {
+            media.frame = NSRect(x: mediaFrame.minX, y: mediaFrame.minY, width: liveWidth.rounded(), height: (liveWidth * aspect).rounded())
+        }
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard dragging else { return }
+        dragging = false
+        // Snap to 5% steps: tidy numbers in the Markdown, and easy to match another picture.
+        let percent = Int((liveWidth / max(column, 1) * 20).rounded()) * 5
+        needsDisplay = true
+        if abs(liveWidth - startWidth) >= 2 {
+            commit?(min(100, max(10, percent)))
+        } else {
+            media?.frame = mediaFrame
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard hovering || dragging else { return }
+        let width = currentWidth, height = currentWidth * aspect
+        if dragging {
+            let outline = NSBezierPath(roundedRect: NSRect(x: 0.5, y: 0.5, width: width - 1, height: height - 1), xRadius: 10, yRadius: 10)
+            outline.lineWidth = 1.5
+            outline.setLineDash([5, 4], count: 2, phase: 0)
+            NSColor.controlAccentColor.setStroke()
+            outline.stroke()
+            let percent = Int((width / max(column, 1) * 20).rounded()) * 5
+            let label = "\(min(100, max(10, percent)))%" as NSString
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.white,
+            ]
+            let size = label.size(withAttributes: attributes)
+            let pill = NSRect(x: width - size.width - 22, y: height - size.height - 18, width: size.width + 14, height: size.height + 6)
+            NSColor.black.withAlphaComponent(0.65).setFill()
+            NSBezierPath(roundedRect: pill, xRadius: pill.height / 2, yRadius: pill.height / 2).fill()
+            label.draw(at: NSPoint(x: pill.minX + 7, y: pill.minY + 3), withAttributes: attributes)
+        }
+        // The grip: a white disc with two diagonal strokes, readable on any picture.
+        let grip = gripRect.insetBy(dx: 3, dy: 3)
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 3
+        shadow.set()
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: grip).fill()
+        NSShadow().set()
+        NSColor.black.withAlphaComponent(0.6).setStroke()
+        for inset: CGFloat in [4.5, 8] {
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: grip.maxX - inset, y: grip.maxY - 3.5))
+            line.line(to: NSPoint(x: grip.maxX - 3.5, y: grip.maxY - inset))
+            line.lineWidth = 1.3
+            line.lineCapStyle = .round
+            line.stroke()
+        }
     }
 }

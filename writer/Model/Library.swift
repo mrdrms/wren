@@ -229,6 +229,11 @@ final class LibraryStore {
             guard Safety.isMediaFile(source), !fm.fileExists(atPath: destination.path) else { continue }
             try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? fm.copyItem(at: source, to: destination)
+            // A drawing's strokes travel with its picture, so it stays editable.
+            let strokes = DrawingFiles.sidecar(for: source)
+            if fm.fileExists(atPath: strokes.path) {
+                try? fm.copyItem(at: strokes, to: DrawingFiles.sidecar(for: destination))
+            }
         }
     }
 

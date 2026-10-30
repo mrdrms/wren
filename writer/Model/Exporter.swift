@@ -155,20 +155,26 @@ enum MarkdownHTML {
         guard escaped.contains("![") else { return escaped }
         let result = NSMutableString(string: escaped)
         for m in mediaRegex.matches(in: escaped, range: NSRange(location: 0, length: result.length)).reversed() {
-            let alt = result.substring(with: m.range(at: 1))
+            let (alt, width) = MarkdownImage.split(alt: result.substring(with: m.range(at: 1)))
             let src = result.substring(with: m.range(at: 2))
+            // A chosen width, kept as a percentage for the web and marked for print.
+            let sizing: String = switch width {
+            case .percent(let p): " style=\"width: \(p)%\" data-wren-width=\"\(p)%\""
+            case .points(let p): " style=\"width: \(p)px\" data-wren-width=\"\(p)\""
+            case nil: ""
+            }
             let replacement: String
             switch MarkdownImage.kind(of: src) {
             case .youtube(let id):
                 replacement = videosAsLinks
                     ? "<a href=\"https://www.youtube.com/watch?v=\(id)\">▶ \(alt.isEmpty ? "Watch on YouTube" : alt)</a>"
-                    : "<span class=\"embed\"><iframe src=\"https://www.youtube-nocookie.com/embed/\(id)\" title=\"\(alt)\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture\" allowfullscreen></iframe></span>"
+                    : "<span class=\"embed\"\(sizing)><iframe src=\"https://www.youtube-nocookie.com/embed/\(id)\" title=\"\(alt)\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture\" allowfullscreen></iframe></span>"
             case .video:
                 replacement = videosAsLinks
                     ? "<a href=\"\(src)\">▶ \(alt.isEmpty ? "Video" : alt)</a>"
-                    : "<video controls preload=\"metadata\" src=\"\(src)\" title=\"\(alt)\"></video>"
+                    : "<video controls preload=\"metadata\" src=\"\(src)\" title=\"\(alt)\"\(sizing)></video>"
             case .image:
-                replacement = "<img src=\"\(src)\" alt=\"\(alt)\">"
+                replacement = "<img src=\"\(src)\" alt=\"\(alt)\"\(sizing)>"
             }
             result.replaceCharacters(in: m.range, with: replacement)
         }
@@ -375,7 +381,23 @@ enum Exporter {
     }
 
     private static func printHTML(title: String, body: String, style: BlogStyle, folder: URL?) -> String {
-        embedMedia(in: MarkdownHTML.document(title: title, body: body, style: style, print: true), folder: folder)
+        let html = embedMedia(in: MarkdownHTML.document(title: title, body: body, style: style, print: true), folder: folder)
+        return fixedWidths(html, column: BookTypesetter.textWidth(for: sheetLayout))
+    }
+
+    private static let sizedMedia = try! NSRegularExpression(pattern: #"style="width: [^"]*" data-wren-width="(\d+)(%?)""#)
+
+    /// The rich-text importer behind PDF, Word and pasting ignores CSS widths, so pictures
+    /// with a chosen size get a fixed width in points for the page they're going onto.
+    static func fixedWidths(_ html: String, column: Double) -> String {
+        guard html.contains("data-wren-width") else { return html }
+        let result = NSMutableString(string: html)
+        for m in sizedMedia.matches(in: html, range: NSRange(location: 0, length: result.length)).reversed() {
+            let number = Double(result.substring(with: m.range(at: 1))) ?? 100
+            let points = m.range(at: 2).length > 0 ? column * number / 100 : min(column, number)
+            result.replaceCharacters(in: m.range, with: "width=\"\(Int(points.rounded()))\"")
+        }
+        return result as String
     }
 
     /// A single sheet as a PDF: A4, about an inch of margin, page numbers from page two.
@@ -421,7 +443,7 @@ enum Exporter {
     /// both have their own title field.
     static func copyRich(_ post: PreparedPost, folder: URL?) {
         let html = "<html><head><meta charset=\"utf-8\"></head><body>"
-            + embedMedia(in: MarkdownHTML.convert(post.markdown), folder: folder) + "</body></html>"
+            + fixedWidths(embedMedia(in: MarkdownHTML.convert(post.markdown), folder: folder), column: 640) + "</body></html>"
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(html, forType: .html)

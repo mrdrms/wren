@@ -216,6 +216,7 @@ final class AppModel {
     private(set) var momentum = Momentum()
 
     @ObservationIgnored weak var editor: WrenTextView?
+    var drawingSession: DrawingSession?
     @ObservationIgnored private var lastWordCount = 0
     @ObservationIgnored private var wordsAtOpen = 0
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -1239,6 +1240,56 @@ final class AppModel {
             showToast(snippets.count == 1 ? "Image added to assets" : "\(snippets.count) files added to assets", symbol: "photo")
         }
         return snippets
+    }
+
+    // MARK: Drawings
+
+    /// A drawing open in the studio: a new one for this sheet, or an existing picture.
+    struct DrawingSession: Identifiable {
+        let id = UUID()
+        let drawing: WrenDrawing
+        /// The picture being edited; nil for a new drawing.
+        let image: URL?
+        let sheet: URL
+    }
+
+    func newDrawing() {
+        guard let sheet = loadedURL else { return }
+        drawingSession = DrawingSession(drawing: WrenDrawing(), image: nil, sheet: sheet)
+    }
+
+    func editDrawing(_ image: URL) {
+        guard let sheet = loadedURL else { return }
+        do {
+            drawingSession = DrawingSession(drawing: try DrawingFiles.load(image: image), image: image, sheet: sheet)
+        } catch {
+            showToast("This drawing can't be edited: \(error.localizedDescription)", symbol: "exclamationmark.triangle.fill")
+        }
+    }
+
+    /// Saves the picture and its strokes beside the sheet; a new drawing goes in at the caret.
+    func finishDrawing(_ session: DrawingSession, _ drawing: WrenDrawing) {
+        drawingSession = nil
+        do {
+            if let image = session.image {
+                try DrawingFiles.save(drawing, image: image)
+                ImagePreviewCache.shared.invalidate(image)
+                editorCoordinator?.restyleForImages()
+                showToast("Drawing saved", symbol: "scribble.variable")
+            } else {
+                let folder = session.sheet.deletingLastPathComponent().appendingPathComponent(ImageImporter.folderName, isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let image = DrawingFiles.newImageURL(in: folder)
+                try DrawingFiles.save(drawing, image: image)
+                guard session.sheet == loadedURL else {
+                    showToast("Drawing saved to the assets folder", symbol: "scribble.variable")
+                    return
+                }
+                editor?.insertBlock("![Drawing](\(ImageImporter.folderName)/\(image.lastPathComponent))")
+            }
+        } catch {
+            showToast("Couldn't save the drawing: \(error.localizedDescription)", symbol: "exclamationmark.triangle.fill")
+        }
     }
 
     func insertMediaWithPanel() {

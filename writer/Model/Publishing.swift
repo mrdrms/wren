@@ -169,9 +169,10 @@ enum Publisher {
         switch account.platform {
         case .ghost: return try await ghostPost(post, markdown: markdown, account: account, secret: secret, draft: asDraft)
         case .wordpress: return try await wordPressPost(post, markdown: markdown, account: account, secret: secret, draft: asDraft)
-        case .microblog: return try await microblogPost(post, markdown: markdown, secret: secret, draft: asDraft)
-        case .devto: return try await devPost(post, markdown: markdown, secret: secret, draft: asDraft)
-        case .hashnode: return try await hashnodePost(post, markdown: markdown, account: account, secret: secret, draft: asDraft)
+        // These take Markdown as written; a size marker would only clutter their alt text.
+        case .microblog: return try await microblogPost(post, markdown: MarkdownImage.withoutSizes(markdown), secret: secret, draft: asDraft)
+        case .devto: return try await devPost(post, markdown: MarkdownImage.withoutSizes(markdown), secret: secret, draft: asDraft)
+        case .hashnode: return try await hashnodePost(post, markdown: MarkdownImage.withoutSizes(markdown), account: account, secret: secret, draft: asDraft)
         }
     }
 
