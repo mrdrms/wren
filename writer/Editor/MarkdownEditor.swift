@@ -115,6 +115,11 @@ struct MarkdownEditor: NSViewRepresentable {
         private var slashHost: NSView?
         private var bubbleHost: NSView?
         private var bubbleTask: Task<Void, Never>?
+        /// Letters just typed, and when: they're drawn in wet ink until they dry.
+        private var wetInk: [(range: NSRange, born: Date)] = []
+        private var inkTimer: Timer?
+        private var lastLength = 0
+        private static let inkDrying: TimeInterval = 0.9
 
         init(model: AppModel) { self.model = model }
 
@@ -162,6 +167,8 @@ struct MarkdownEditor: NSViewRepresentable {
             textView.imageFolder = model.loadedURL?.deletingLastPathComponent()
             highlighter.revealRange = nil
             textView.string = text
+            lastLength = (text as NSString).length
+            wetInk.removeAll()
             textView.layoutImagePreviews()
             isLoading = false
             textView.undoManager?.removeAllActions()
@@ -329,6 +336,7 @@ struct MarkdownEditor: NSViewRepresentable {
             guard !isLoading, let textView else { return }
             updateCaretFraction()
             model.textDidChange(textView.string)
+            noteWetInk()
             updateDecorations()
             centerCaret(animated: true)
             hideBubble()
@@ -522,6 +530,65 @@ struct MarkdownEditor: NSViewRepresentable {
                 if end < full.length {
                     layout.addTemporaryAttribute(.foregroundColor, value: dim, forCharacterRange: NSRange(location: end, length: full.length - end))
                 }
+            }
+            applyWetInk()
+        }
+
+        // MARK: Wet ink
+
+        /// Typing (not pasting or loading) leaves a few letters of wet ink behind the caret.
+        private func noteWetInk() {
+            guard let textView else { return }
+            let length = (textView.string as NSString).length
+            defer { lastLength = length }
+            let added = length - lastLength
+            let caret = textView.selectedRange().location
+            guard model.prefs.wetInk, added > 0, added <= 4, caret >= added else { return }
+            wetInk.append((NSRange(location: caret - added, length: added), .now))
+            if inkTimer == nil {
+                inkTimer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.dryInk() }
+                }
+            }
+        }
+
+        /// Fresh ink starts in the accent and settles into the color the text is set in.
+        private func applyWetInk() {
+            guard let textView, let layout = textView.layoutManager, let storage = textView.textStorage, !wetInk.isEmpty,
+                  let config else { return }
+            let accent = Theme.named(config.themeID).accent
+            let length = storage.length
+            let now = Date.now
+            for drop in wetInk where NSMaxRange(drop.range) <= length {
+                let age = now.timeIntervalSince(drop.born) / Self.inkDrying
+                guard age < 1 else { continue }
+                let dry = storage.attribute(.foregroundColor, at: drop.range.location, effectiveRange: nil) as? NSColor ?? accent
+                guard dry.alphaComponent > 0.05 else { continue } // hidden markup stays hidden
+                // Wet for a beat, then drying quickly, then the last of the sheen.
+                let wet = pow(1 - age, 2.2)
+                let color = dry.blended(withFraction: wet * 0.85, of: accent) ?? dry
+                layout.addTemporaryAttribute(.foregroundColor, value: color, forCharacterRange: drop.range)
+            }
+        }
+
+        private func dryInk() {
+            guard let textView, let layout = textView.layoutManager else { return }
+            let length = (textView.string as NSString).length
+            let now = Date.now
+            let dried = wetInk.filter { now.timeIntervalSince($0.born) >= Self.inkDrying }
+            wetInk.removeAll { now.timeIntervalSince($0.born) >= Self.inkDrying }
+            if dried.isEmpty {
+                applyWetInk()
+            } else {
+                // Dried letters go back to the page's own ink (and focus dimming, if on).
+                for drop in dried where NSMaxRange(drop.range) <= length {
+                    layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: drop.range)
+                }
+                updateDecorations()
+            }
+            if wetInk.isEmpty {
+                inkTimer?.invalidate()
+                inkTimer = nil
             }
         }
 

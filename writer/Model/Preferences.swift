@@ -66,6 +66,10 @@ final class Preferences {
     var showFormatBar: Bool { didSet { defaults.set(showFormatBar, forKey: "showFormatBar") } }
     /// Fade the format bar and status pill while typing; moving the pointer brings them back.
     var minimalWhileTyping: Bool { didSet { defaults.set(minimalWhileTyping, forKey: "minimalWhileTyping") } }
+    /// New letters land in wet, colored ink and dry to the page's ink over a moment.
+    var wetInk: Bool { didSet { defaults.set(wetInk, forKey: "wetInk") } }
+    /// The ensō, the seal and the name, each time Wren opens.
+    var launchRitual: Bool { didSet { defaults.set(launchRitual, forKey: "launchRitual") } }
     /// Blogs you publish to. Their keys live in the Keychain, not here.
     var publishAccounts: [PublishAccount] {
         didSet { defaults.set(try? JSONEncoder().encode(publishAccounts), forKey: "publishAccounts") }
@@ -92,7 +96,7 @@ final class Preferences {
 
     private init() {
         defaults.register(defaults: [
-            "themeID": "paper",
+            "themeID": "aurora",
             "font": EditorFontChoice.serif.rawValue,
             "fontSize": 18.0,
             "lineWidth": 680.0,
@@ -111,6 +115,8 @@ final class Preferences {
             "hideMarkup": true,
             "showFormatBar": true,
             "minimalWhileTyping": true,
+            "wetInk": true,
+            "launchRitual": true,
             "aiEnabled": false,
             "aiConfirmRequests": true,
             "pomodoroEnabled": false,
@@ -122,7 +128,7 @@ final class Preferences {
             "pomodoroZen": false,
             "pomodoroBreakScreen": true,
         ])
-        let savedTheme = defaults.string(forKey: "themeID") ?? "paper"
+        let savedTheme = defaults.string(forKey: "themeID") ?? "aurora"
         themeID = Theme.named(savedTheme).id // retired themes land on their closest successor
         font = EditorFontChoice(rawValue: defaults.string(forKey: "font") ?? "") ?? .serif
         fontSize = defaults.double(forKey: "fontSize")
@@ -143,6 +149,8 @@ final class Preferences {
         hideMarkup = defaults.bool(forKey: "hideMarkup")
         showFormatBar = defaults.bool(forKey: "showFormatBar")
         minimalWhileTyping = defaults.bool(forKey: "minimalWhileTyping")
+        wetInk = defaults.bool(forKey: "wetInk")
+        launchRitual = defaults.bool(forKey: "launchRitual")
         publishAccounts = (defaults.data(forKey: "publishAccounts")).flatMap { try? JSONDecoder().decode([PublishAccount].self, from: $0) } ?? []
         aiEnabled = defaults.bool(forKey: "aiEnabled")
         aiProvider = AIProvider(rawValue: defaults.string(forKey: "aiProvider") ?? "") ?? .anthropic

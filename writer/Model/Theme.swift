@@ -15,13 +15,20 @@ extension NSColor {
 /// The scene drawn behind the page. Most themes are a plain page; a few keep a quiet scene.
 enum Atmosphere: String {
     case ink, stars, matrix
+    /// Slow, luminous color light drifting behind glass.
+    case aurora
     /// A plain page: no scene at all.
     case none
+
+    /// Light that drifts too slowly to distract moves even when scene animation is off:
+    /// a still aurora is just a gradient.
+    var drifts: Bool { self == .aurora }
 
     /// The slowest redraw rate that still looks smooth for this scene; 0 means fully static.
     var framesPerSecond: Double {
         switch self {
         case .matrix: 15
+        case .aurora: 12
         case .stars: 10
         case .ink, .none: 0
         }
@@ -72,6 +79,19 @@ struct Theme: Identifiable, Equatable {
 
     // Four light, four dark. Plain pages first: the words are the point.
     static let all: [Theme] = [
+        // The signature pair: light drifting behind a frosted-glass page.
+        Theme(id: "aurora", name: "Aurora", tagline: "Living light behind frosted glass", isDark: true,
+              background: NSColor(hex: 0x07080F), text: NSColor(hex: 0xE4E2EE), muted: NSColor(hex: 0x6F6C84),
+              accent: NSColor(hex: 0xB59DFF), heading: NSColor(hex: 0xFFFFFF), codeBackground: NSColor(hex: 0x171928),
+              glow: [NSColor(hex: 0x4A30B8), NSColor(hex: 0x0E7C80), NSColor(hex: 0xA3306E)],
+              panel: NSColor(hex: 0x0B0C16), leaf: NSColor(hex: 0x7FD1B9),
+              particles: [NSColor(hex: 0x2D58D6), NSColor(hex: 0xC2622E)], atmosphere: .aurora),
+        Theme(id: "dawn", name: "Dawn", tagline: "Morning light through frosted glass", isDark: false,
+              background: NSColor(hex: 0xF6F4F2), text: NSColor(hex: 0x29272F), muted: NSColor(hex: 0xA19EAC),
+              accent: NSColor(hex: 0x6A4DE0), heading: NSColor(hex: 0x111017), codeBackground: NSColor(hex: 0xEDEAF2),
+              glow: [NSColor(hex: 0xFFB9A0), NSColor(hex: 0xB9CCFF), NSColor(hex: 0xBFEBD6)],
+              panel: NSColor(hex: 0xF1EFF3), leaf: NSColor(hex: 0x4FA37E),
+              particles: [NSColor(hex: 0xF5C6EA), NSColor(hex: 0xFFE1A0)], atmosphere: .aurora),
         Theme(id: "paper", name: "Paper", tagline: "Warm off-white, soft ink", isDark: false,
               background: NSColor(hex: 0xFBF9F5), text: NSColor(hex: 0x2B2926), muted: NSColor(hex: 0xA8A29A),
               accent: NSColor(hex: 0xC05A30), heading: NSColor(hex: 0x1A1917), codeBackground: NSColor(hex: 0xF2EEE7),

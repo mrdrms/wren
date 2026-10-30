@@ -9,6 +9,8 @@ struct ContentView: View {
     @State private var sceneFrame: CGRect = .zero
     /// The sidebar as it was before Zen or a full preview folded it away.
     @State private var columnsBeforeImmersive: NavigationSplitViewVisibility?
+    @State private var ritual = Preferences.shared.launchRitual
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         @Bindable var model = model
@@ -87,6 +89,14 @@ struct ContentView: View {
                 ToastView(toast: toast)
                     .padding(.top, 14)
                     .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .overlay {
+            if ritual && !reduceMotion {
+                LaunchRitual(theme: theme) {
+                    withAnimation(.easeInOut(duration: 0.7)) { ritual = false }
+                }
+                .transition(.opacity)
             }
         }
         .sheet(isPresented: $model.showJourney) { JourneyView() }

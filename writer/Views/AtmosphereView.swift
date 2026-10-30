@@ -100,6 +100,7 @@ private struct AtmosphereRenderer {
             ink(&g)
             inkSun(&g)
             hills(&g, color: color(0), alphas: [0.06, 0.1, 0.15])
+        case (.aurora, .moving): aurora(&g)
         case (.matrix, .moving): rain(&g)
         case (.matrix, .front): scanlines(&g)
         default: break
@@ -186,6 +187,30 @@ private struct AtmosphereRenderer {
 
 
 
+
+    // MARK: Aurora
+
+    /// Great soft pools of colored light wandering on their own slow orbits, adding up
+    /// where they cross. On a dark sky they glow; on a light one they tint like morning.
+    private func aurora(_ g: inout GraphicsContext) {
+        let colors = (theme.glow + theme.particles).map { Color(nsColor: $0) }
+        let span = max(W, H)
+        var c = g
+        c.blendMode = theme.isDark ? .plusLighter : .normal
+        for i in 0..<colors.count {
+            let x = W * (0.5 + 0.48 * sin(t * (0.021 + r(i, 1) * 0.025) + r(i, 2) * 6.28))
+            let y = H * (0.5 + 0.44 * cos(t * (0.017 + r(i, 3) * 0.022) + r(i, 4) * 6.28))
+            // Each pool slowly breathes as well as wanders.
+            let radius = span * (0.32 + r(i, 5) * 0.22) * (1 + 0.12 * sin(t * 0.05 + Double(i)))
+            let strength = theme.isDark ? (i < 3 ? 0.62 : 0.4) : (i < 3 ? 0.75 : 0.6)
+            c.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)),
+                   with: .radialGradient(Gradient(stops: [
+                       .init(color: colors[i].opacity(strength), location: 0),
+                       .init(color: colors[i].opacity(strength * 0.45), location: 0.45),
+                       .init(color: colors[i].opacity(0), location: 1),
+                   ]), center: CGPoint(x: x, y: y), startRadius: 0, endRadius: radius))
+        }
+    }
 
     // MARK: Scenes
 

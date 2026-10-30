@@ -9,7 +9,7 @@ struct EditorScreen: View {
         let prefs = model.prefs
         let theme = prefs.theme
         ZStack(alignment: .bottom) {
-            AtmosphereView(theme: theme, animated: prefs.ambient, continuous: true)
+            AtmosphereView(theme: theme, animated: prefs.ambient || theme.atmosphere.drifts, continuous: true)
                 .ignoresSafeArea()
             // Plain themes get a desk for the page to lie on; scenes are their own desk.
             if theme.atmosphere == .none {
@@ -359,8 +359,14 @@ struct PaperSheet: View {
         GeometryReader { proxy in
             let width = min(proxy.size.width - 32, lineWidth + 176)
             ZStack {
-                Rectangle().fill(theme.paperColor)
-                PaperGrain(dark: theme.isDark)
+                if theme.atmosphere == .aurora {
+                    // Frosted glass: the light glows through, the words stay crisp.
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(theme.bg.opacity(theme.isDark ? 0.46 : 0.5))
+                } else {
+                    Rectangle().fill(theme.paperColor)
+                    PaperGrain(dark: theme.isDark)
+                }
             }
             .frame(width: max(0, width))
             .padding(.vertical, -40)
@@ -426,9 +432,29 @@ struct Enso: View {
     @State private var progress: CGFloat = 0
 
     var body: some View {
+        EnsoStroke(color: color, progress: progress)
+            .onAppear {
+                progress = 0
+                withAnimation(.easeOut(duration: 1.8)) { progress = 1 }
+            }
+    }
+}
+
+/// The stroke itself, drawn as far as `progress`. Animatable, so the brush really travels.
+private struct EnsoStroke: View, Animatable {
+    let color: Color
+    var progress: CGFloat
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
         Canvas { g, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let radius = min(size.width, size.height) * 0.42
+            // The brush is sized for a 150-point circle and grows with it.
+            let brush = max(1, radius / 63)
             let steps = Int(220 * progress)
             guard steps > 1 else { return }
             for i in 0..<steps {
@@ -437,15 +463,11 @@ struct Enso: View {
                 let angle = -.pi / 2.6 + t * .pi * 1.86
                 let wobble = sin(t * 19) * 1.2
                 let point = CGPoint(x: center.x + cos(angle) * (radius + wobble), y: center.y + sin(angle) * (radius + wobble))
-                let width = max(1.2, 11 * pow(1 - t, 0.6) + 2 * sin(t * 7))
+                let width = max(1.2, 11 * pow(1 - t, 0.6) + 2 * sin(t * 7)) * brush
                 let dry = t > 0.82 ? Double(1 - (t - 0.82) / 0.18) : 1
                 g.fill(Path(ellipseIn: CGRect(x: point.x - width / 2, y: point.y - width / 2, width: width, height: width)),
                        with: .color(color.opacity(0.85 * dry)))
             }
-        }
-        .onAppear {
-            progress = 0
-            withAnimation(.easeOut(duration: 1.8)) { progress = 1 }
         }
     }
 }

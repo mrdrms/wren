@@ -269,6 +269,14 @@ final class MarkdownHighlighter {
             let size = fontSize * scale[level - 1]
             storage.addAttributes([.font: font(size: size, bold: true), .foregroundColor: theme.heading,
                                    .kern: level <= 2 ? -size * 0.012 : 0], range: m.range)
+            // Under the aurora, big headings catch a little of the light.
+            if theme.atmosphere == .aurora && theme.isDark && level <= 2 {
+                let glow = NSShadow()
+                glow.shadowColor = theme.accent.withAlphaComponent(0.55)
+                glow.shadowBlurRadius = size * 0.6
+                glow.shadowOffset = .zero
+                storage.addAttribute(.shadow, value: glow, range: m.range(at: 2))
+            }
             markup(NSRange(location: m.range.location, length: m.range(at: 2).location - m.range.location))
             // Headings sit close to the text they introduce and well clear of what came before.
             let style = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
