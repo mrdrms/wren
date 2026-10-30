@@ -17,7 +17,10 @@ struct EditorScreen: View {
                 theme.deskColor.ignoresSafeArea()
             }
 
-            if model.loadedURL != nil {
+            if model.showWelcome {
+                WelcomePage()
+                    .transition(.opacity)
+            } else if model.loadedURL != nil {
                 GeometryReader { proxy in
                     HStack(spacing: 0) {
                         writingColumn
@@ -42,10 +45,13 @@ struct EditorScreen: View {
                 EmptyEditor()
             }
         }
-        .navigationTitle(model.zen ? "" : model.currentTitle)
+        .navigationTitle(model.zen ? "" : model.showWelcome ? "Welcome" : model.currentTitle)
+        .animation(.smooth(duration: 0.3), value: model.showWelcome)
         // The page runs up under the title bar, so the window reads as one sheet of paper.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
+            // Writing tools only make sense with a sheet open, not on the welcome page.
+            if !model.showWelcome {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
                     Picker("Focus", selection: Bindable(prefs).focus) {
@@ -80,6 +86,7 @@ struct EditorScreen: View {
                     Label("Inspector", systemImage: "sidebar.trailing")
                 }
                 .help("Inspector (⌘⌥I)")
+            }
             }
         }
     }
@@ -232,6 +239,7 @@ struct StatusHUD: View {
                         Text("· \(model.sprintWords) words").foregroundStyle(.secondary)
                     }
                     .foregroundStyle(accent)
+                    .help("Writing sprint: time left and words so far. Right-click to finish or cancel.")
                     .contextMenu {
                         Button("Finish Sprint Now") { model.finishSprint() }
                         Button("Cancel Sprint", role: .destructive) { model.cancelSprint() }

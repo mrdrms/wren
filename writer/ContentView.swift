@@ -7,8 +7,6 @@ struct ContentView: View {
     @State private var escapeMonitor: Any?
     @State private var pointerMonitor: Any?
     @State private var sceneFrame: CGRect = .zero
-    /// The sidebar as it was before Zen or a full preview folded it away.
-    @State private var columnsBeforeImmersive: NavigationSplitViewVisibility?
     @State private var ritual = Preferences.shared.launchRitual
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -25,14 +23,17 @@ struct ContentView: View {
                 EditorScreen()
             }
         }
-        .onChange(of: model.isImmersive) { _, immersive in
+        // Zen, a full preview and the welcome page all have the window to themselves.
+        .onChange(of: model.isImmersive || model.showWelcome, initial: true) { _, immersive in
             withAnimation(.smooth(duration: 0.3)) {
                 if immersive {
-                    columnsBeforeImmersive = model.columnVisibility
+                    // Only the first fold remembers: a rebuilt window would otherwise record
+                    // the already-folded sidebar as the one to bring back.
+                    if model.columnsBeforeImmersive == nil { model.columnsBeforeImmersive = model.columnVisibility }
                     model.columnVisibility = .detailOnly
-                } else if let previous = columnsBeforeImmersive {
+                } else if let previous = model.columnsBeforeImmersive {
                     if model.columnVisibility == .detailOnly { model.columnVisibility = previous }
-                    columnsBeforeImmersive = nil
+                    model.columnsBeforeImmersive = nil
                 }
             }
         }
@@ -43,7 +44,9 @@ struct ContentView: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sceneFrame = $0 }
         }
         .environment(\.sceneFrame, sceneFrame)
-        .inspector(isPresented: $model.showInspector) {
+        // The inspector describes a sheet, so it stays closed on the welcome page.
+        .inspector(isPresented: Binding(get: { model.showInspector && !model.showWelcome },
+                                        set: { model.showInspector = $0 })) {
             InspectorView()
         }
         .toolbar(model.isImmersive ? .hidden : .automatic, for: .windowToolbar)
@@ -99,8 +102,12 @@ struct ContentView: View {
                 .transition(.opacity)
             }
         }
+        .onChange(of: model.openedFromFinder) { _, opened in
+            if opened { ritual = false }
+        }
         .sheet(item: $model.drawingSession) { session in
             DrawingStudio(drawing: session.drawing, isNew: session.image == nil,
+                          doneTitle: session.sheet == nil ? "Create Sheet" : nil,
                           onCancel: { model.drawingSession = nil },
                           onDone: { model.finishDrawing(session, $0) })
                 .interactiveDismissDisabled()

@@ -105,6 +105,7 @@ private struct WritingSettings: View {
                 Toggle("Hide controls while typing", isOn: $prefs.minimalWhileTyping)
                 Toggle("Wet ink: new words dry onto the page", isOn: $prefs.wetInk)
                 Toggle("Opening ritual: the ensō and seal when Wren starts", isOn: $prefs.launchRitual)
+                Toggle("Open on the welcome page", isOn: $prefs.showWelcome)
                 Text("The format bar and status pill fade as you type. Move the pointer to bring them back.")
                     .font(.caption).foregroundStyle(.secondary)
             } header: {

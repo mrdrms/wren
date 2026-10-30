@@ -198,6 +198,7 @@ struct CommandPalette: View {
             PaletteItem(id: "note", title: "Insert Margin Note", subtitle: nil, symbol: "text.bubble", shortcut: "⇧⌘M") { m.format(.note) },
             PaletteItem(id: "sounds", title: "Key Sounds: \(p.keySounds ? "Off" : "On")", subtitle: nil, symbol: "speaker.wave.2", shortcut: nil) { p.keySounds.toggle() },
             PaletteItem(id: "zen", title: "Zen Mode", subtitle: "Hide everything but the page", symbol: "leaf", shortcut: "⇧⌘↩") { m.toggleZen() },
+            PaletteItem(id: "welcome", title: "Welcome Page", subtitle: "Recent sheets and ways to start", symbol: "house", shortcut: "⇧⌘1") { m.showWelcome = true },
             PaletteItem(id: "journey", title: "Writing Journey", subtitle: "Streaks and history", symbol: "chart.line.uptrend.xyaxis", shortcut: "⇧⌘J") { m.showJourney = true },
             PaletteItem(id: "snapshot", title: "Take Snapshot", subtitle: nil, symbol: "camera", shortcut: "⇧⌘S") { m.takeSnapshot() },
             PaletteItem(id: "library", title: m.navigatorPage == .library ? "Show Sheets" : "Show Library", subtitle: "Your folders and projects", symbol: "books.vertical", shortcut: "⌥⌘L") { m.toggleLibrary() },

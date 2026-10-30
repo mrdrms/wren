@@ -274,8 +274,8 @@ final class WrenTextView: NSTextView {
                     view.link = nil
                 }
                 // A drawing with its strokes beside it can be opened again and edited.
-                if kind == .image, let onEditDrawing, let url = MarkdownImage.resolve(path, relativeTo: imageFolder),
-                   DrawingFiles.isEditable(url) {
+                if kind == .image, let onEditDrawing, MarkdownImage.isLocalRelative(path),
+                   let url = MarkdownImage.resolve(path, relativeTo: imageFolder), DrawingFiles.isEditable(url) {
                     view.edit = { onEditDrawing(url) }
                 } else {
                     view.edit = nil
@@ -728,7 +728,10 @@ final class MediaResizeHandle: NSView {
     }
 
     override func resetCursorRects() {
-        if hovering { addCursorRect(gripRect, cursor: .frameResize(position: .bottomRight, directions: .all)) }
+        removeAllToolTips()
+        guard hovering else { return }
+        addCursorRect(gripRect, cursor: .frameResize(position: .bottomRight, directions: .all))
+        addToolTip(gripRect, owner: "Drag to resize. The size is kept as a share of the page width." as NSString, userData: nil)
     }
 
     override func mouseEntered(with event: NSEvent) {

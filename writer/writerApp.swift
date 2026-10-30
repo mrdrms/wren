@@ -1,8 +1,19 @@
 import SwiftUI
 
+/// Owns the app's model, so files opened with Wren from Finder are handled the moment they
+/// arrive, even at launch before the window exists: Wren then opens straight on the file.
+final class WrenAppDelegate: NSObject, NSApplicationDelegate {
+    let model = AppModel()
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        model.openFromFinder(urls)
+    }
+}
+
 @main
 struct WrenApp: App {
-    @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor(WrenAppDelegate.self) private var delegate
+    private var model: AppModel { delegate.model }
 
     var body: some Scene {
         Window("Wren", id: "main") {
@@ -162,6 +173,8 @@ struct WrenCommands: Commands {
             .disabled(model.loadedURL == nil)
             Button("Writing Journey") { model.showJourney = true }
                 .keyboardShortcut("j", modifiers: [.command, .shift])
+            Button("Welcome Page") { model.showWelcome = true }
+                .keyboardShortcut("1", modifiers: [.command, .shift])
             Divider()
             Menu("Theme") {
                 Picker("Theme", selection: Bindable(prefs).themeID) {

@@ -70,6 +70,8 @@ final class Preferences {
     var wetInk: Bool { didSet { defaults.set(wetInk, forKey: "wetInk") } }
     /// The ensō, the seal and the name, each time Wren opens.
     var launchRitual: Bool { didSet { defaults.set(launchRitual, forKey: "launchRitual") } }
+    /// Open on the welcome page rather than straight into the last sheet.
+    var showWelcome: Bool { didSet { defaults.set(showWelcome, forKey: "showWelcome") } }
     /// Blogs you publish to. Their keys live in the Keychain, not here.
     var publishAccounts: [PublishAccount] {
         didSet { defaults.set(try? JSONEncoder().encode(publishAccounts), forKey: "publishAccounts") }
@@ -117,6 +119,7 @@ final class Preferences {
             "minimalWhileTyping": true,
             "wetInk": true,
             "launchRitual": true,
+            "showWelcome": true,
             "aiEnabled": false,
             "aiConfirmRequests": true,
             "pomodoroEnabled": false,
@@ -151,6 +154,7 @@ final class Preferences {
         minimalWhileTyping = defaults.bool(forKey: "minimalWhileTyping")
         wetInk = defaults.bool(forKey: "wetInk")
         launchRitual = defaults.bool(forKey: "launchRitual")
+        showWelcome = defaults.bool(forKey: "showWelcome")
         publishAccounts = (defaults.data(forKey: "publishAccounts")).flatMap { try? JSONDecoder().decode([PublishAccount].self, from: $0) } ?? []
         aiEnabled = defaults.bool(forKey: "aiEnabled")
         aiProvider = AIProvider(rawValue: defaults.string(forKey: "aiProvider") ?? "") ?? .anthropic

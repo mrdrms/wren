@@ -5,13 +5,17 @@ import SwiftUI
 struct DrawingStudio: View {
     @State private var editor: InkEditor
     let isNew: Bool
+    /// What the finishing button says; by default Insert for a new drawing, Save for an edit.
+    let doneTitle: String?
     let onCancel: () -> Void
     let onDone: (WrenDrawing) -> Void
     @State private var confirmDiscard = false
 
-    init(drawing: WrenDrawing, isNew: Bool, onCancel: @escaping () -> Void, onDone: @escaping (WrenDrawing) -> Void) {
+    init(drawing: WrenDrawing, isNew: Bool, doneTitle: String? = nil,
+         onCancel: @escaping () -> Void, onDone: @escaping (WrenDrawing) -> Void) {
         _editor = State(initialValue: InkEditor(drawing: drawing))
         self.isNew = isNew
+        self.doneTitle = doneTitle
         self.onCancel = onCancel
         self.onDone = onDone
     }
@@ -27,7 +31,7 @@ struct DrawingStudio: View {
                 Text(isNew ? "New Drawing" : "Edit Drawing")
                     .font(.headline)
                 Spacer()
-                Button(isNew ? "Insert" : "Save") { onDone(editor.drawing) }
+                Button(doneTitle ?? (isNew ? "Insert" : "Save")) { onDone(editor.drawing) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(editor.drawing.isEmpty || !editor.hasChanges)
@@ -102,7 +106,8 @@ struct InkToolbar: View {
                             .contentShape(.circle)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Color")
+                    .help(color.name)
+                    .accessibilityLabel(color.name)
                     .accessibilityAddTraits(active ? .isSelected : [])
                 }
             }

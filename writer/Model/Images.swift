@@ -64,6 +64,15 @@ nonisolated enum MarkdownImage {
         }
     }
 
+    /// A path to a file beside the sheet: relative, no scheme, never climbing out with `..`.
+    /// Only these are moved with a sheet or rewritten in place (a drawing being saved), so
+    /// a Markdown file can't point Wren at files elsewhere.
+    static func isLocalRelative(_ path: String) -> Bool {
+        let decoded = path.removingPercentEncoding ?? path
+        guard URL(string: path)?.scheme == nil, !decoded.hasPrefix("/"), !decoded.hasPrefix("~") else { return false }
+        return !decoded.split(separator: "/").contains("..")
+    }
+
     // MARK: Sizes
 
     /// A width written at the end of the alt text, the way Obsidian does it:

@@ -62,6 +62,7 @@ final class LibraryStore {
             defaults.set(2, forKey: "seedVersion")
         }
         roots = [defaultRoot] + resolveBookmarks()
+        openedFiles = resolveFileBookmarks()
         refresh()
     }
 
@@ -80,7 +81,79 @@ final class LibraryStore {
             return node
         }
         projects = foundProjects
+        // Files opened from Finder that live outside every library folder.
+        for file in openedFiles where !allSheets.contains(where: { Self.samePath($0.url, file) }) {
+            guard !Self.isTooLarge(file), let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .now
+            allSheets.append(makeSheet(url: file, folder: file.deletingLastPathComponent(), text: text, modified: modified))
+        }
         sheets = allSheets.sorted { $0.modified > $1.modified }
+    }
+
+    // MARK: Files opened from Finder
+
+    /// Single files opened with "Open With → Wren" from outside the library. The sandbox
+    /// lets Wren reach only the file itself, not its folder, so these are edited in place
+    /// but can't be renamed, moved or given an assets folder.
+    private(set) var openedFiles: [URL] = []
+
+    static func samePath(_ a: URL, _ b: URL) -> Bool {
+        a.standardizedFileURL.resolvingSymlinksInPath().path == b.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    /// Opened from Finder and not (or no longer) inside a library folder.
+    func isOpenedFile(_ url: URL) -> Bool {
+        openedFiles.contains { Self.samePath($0, url) } && !isInsideRoot(url)
+    }
+
+    func isInsideRoot(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        return roots.contains { path.hasPrefix($0.standardizedFileURL.resolvingSymlinksInPath().path + "/") }
+    }
+
+    /// The largest text file Wren will open from Finder; anything bigger is likely a log or
+    /// data file, and would make the editor crawl.
+    static let maxOpenedFileBytes = 20 * 1024 * 1024
+
+    static func isTooLarge(_ url: URL) -> Bool {
+        ((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > maxOpenedFileBytes
+    }
+
+    /// Remembers a file opened from Finder, so it's still here next launch.
+    func addOpenedFile(_ url: URL) {
+        guard !isOpenedFile(url) else { return }
+        var stored = defaults.dictionary(forKey: "openedFileBookmarks") as? [String: Data] ?? [:]
+        if let data = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+            stored[url.path] = data
+            defaults.set(stored, forKey: "openedFileBookmarks")
+        }
+        openedFiles.append(url)
+        refresh()
+    }
+
+    /// Drops an opened file from Wren. The file itself stays where it is.
+    func removeOpenedFile(_ url: URL) {
+        var stored = defaults.dictionary(forKey: "openedFileBookmarks") as? [String: Data] ?? [:]
+        for key in stored.keys where Self.samePath(URL(fileURLWithPath: key), url) { stored[key] = nil }
+        defaults.set(stored, forKey: "openedFileBookmarks")
+        for file in openedFiles where Self.samePath(file, url) { file.stopAccessingSecurityScopedResource() }
+        openedFiles.removeAll { Self.samePath($0, url) }
+        refresh()
+    }
+
+    private func resolveFileBookmarks() -> [URL] {
+        let stored = defaults.dictionary(forKey: "openedFileBookmarks") as? [String: Data] ?? [:]
+        var urls: [URL] = []
+        var kept: [String: Data] = [:]
+        for (_, data) in stored {
+            var stale = false
+            guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale),
+                  url.startAccessingSecurityScopedResource(), fm.fileExists(atPath: url.path) else { continue }
+            urls.append(url)
+            kept[url.path] = stale ? ((try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)) ?? data) : data
+        }
+        defaults.set(kept, forKey: "openedFileBookmarks")
+        return urls.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     private func scanFolder(_ folder: URL, isRoot: Bool, into sheets: inout [Sheet], projects: inout [URL: ProjectInfo]) -> FolderNode {
@@ -223,7 +296,7 @@ final class LibraryStore {
         let newFolder = sheet.deletingLastPathComponent()
         for reference in MarkdownImage.references(in: text) {
             let path = reference.path.removingPercentEncoding ?? reference.path
-            guard URL(string: reference.path)?.scheme == nil, !path.hasPrefix("/"), !path.contains("..") else { continue }
+            guard MarkdownImage.isLocalRelative(reference.path) else { continue }
             let source = oldFolder.appendingPathComponent(path)
             let destination = newFolder.appendingPathComponent(path)
             guard Safety.isMediaFile(source), !fm.fileExists(atPath: destination.path) else { continue }

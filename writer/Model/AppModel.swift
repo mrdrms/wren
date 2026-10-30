@@ -145,10 +145,20 @@ final class AppModel {
     /// Which page of the navigator is showing: your folders, or the sheets inside one.
     var navigatorPage: NavigatorPage = .sheets
     var selectedSheet: URL? {
-        didSet { if selectedSheet != oldValue { open(selectedSheet) } }
+        didSet {
+            guard selectedSheet != oldValue else { return }
+            open(selectedSheet)
+            // Opening a sheet anywhere leaves the welcome page for the writing.
+            if selectedSheet != nil { showWelcome = false }
+        }
     }
+    /// Wren's home page, shown in the editor's place.
+    var showWelcome = false
     var searchText = ""
     var columnVisibility: NavigationSplitViewVisibility = .all
+    /// The sidebar as it was before Zen, a full preview or the welcome page folded it away.
+    /// Kept here, not in the view, because the window's content can be rebuilt meanwhile.
+    var columnsBeforeImmersive: NavigationSplitViewVisibility?
 
     // Second editor
     private(set) var companion: CompanionSheet?
@@ -255,6 +265,8 @@ final class AppModel {
             selectedSheet = first.url
             open(first.url)
         }
+        // After the sheet is restored: restoring it isn't the writer choosing to leave the page.
+        showWelcome = prefs.showWelcome
     }
 
     var visibleSheets: [Sheet] { library.sheets(for: sidebarSelection, search: searchText) }
@@ -395,7 +407,9 @@ final class AppModel {
                 snapshots = SnapshotStore.list(for: url)
                 showToast("This sheet was also changed in another app. That version is saved in Time Machine.", symbol: "arrow.triangle.branch")
             }
-            try text.write(to: url, atomically: true, encoding: .utf8)
+            // An opened file's folder is off limits, so it can't take the temporary file an
+            // atomic save writes beside it; it's saved in place instead.
+            try text.write(to: url, atomically: !library.isOpenedFile(url), encoding: .utf8)
             diskText = text
             library.updateSheet(at: url, text: text)
             recordHistory()
@@ -408,7 +422,7 @@ final class AppModel {
 
     /// "Untitled" sheets are renamed after their first line once you move past it.
     private func autoTitleIfNeeded(_ url: URL) {
-        guard prefs.autoTitle,
+        guard prefs.autoTitle, !library.isOpenedFile(url),
               url.deletingPathExtension().lastPathComponent.hasPrefix("Untitled"),
               text.contains("\n") else { return }
         // The visible title: front matter title, or the first line without its Markdown.
@@ -523,7 +537,9 @@ final class AppModel {
 
     var targetFolder: URL {
         if case .folder(let url) = sidebarSelection { return url }
-        if let loaded = loadedURL, let sheet = library.sheets.first(where: { $0.url == loaded }) { return sheet.folder }
+        // A file opened from Finder sits in a folder Wren may not write to; new sheets go home.
+        if let loaded = loadedURL, !library.isOpenedFile(loaded),
+           let sheet = library.sheets.first(where: { $0.url == loaded }) { return sheet.folder }
         return library.defaultRoot
     }
 
@@ -687,6 +703,7 @@ final class AppModel {
     func commitRename() {
         guard let url = renameTarget else { return }
         renameTarget = nil
+        if refuseForOpenedFile(url, "rename it") { return }
         if isWithin(loadedURL, url) || isWithin(companion?.url, url) { saveNow() }
         var newName = renameText
         // Chapters keep their place in the book even if the number was removed while renaming.
@@ -700,6 +717,7 @@ final class AppModel {
     }
 
     func duplicate(_ url: URL) {
+        if refuseForOpenedFile(url, "duplicate it") { return }
         if url == loadedURL { saveNow() }
         if let copy = try? library.duplicate(url) { selectedSheet = copy }
     }
@@ -707,6 +725,7 @@ final class AppModel {
     /// Moves a sheet or folder to the Trash. Returns whether it went.
     @discardableResult
     func trash(_ url: URL, announce: Bool = true) -> Bool {
+        if refuseForOpenedFile(url, "move it to the Trash") { return false }
         if let companion, companion.url == url || companion.url.path.hasPrefix(url.path + "/") {
             companion.saveNow()
             self.companion = nil
@@ -758,13 +777,72 @@ final class AppModel {
     }
 
     func move(_ url: URL, to folder: URL) {
+        if refuseForOpenedFile(url, "move it") { return }
         if isWithin(loadedURL, url) || isWithin(companion?.url, url) { saveNow() }
         guard let newURL = try? library.move(url, to: folder), newURL != url else { return }
         moveDocumentIdentity(from: url, to: newURL)
     }
 
+    /// True once a file has arrived from Finder, so the opening ritual steps aside for it.
+    var openedFromFinder = false
+
+    /// Wren may edit a file opened from Finder but not touch its folder; says so when asked to.
+    private func refuseForOpenedFile(_ url: URL, _ action: String) -> Bool {
+        guard library.isOpenedFile(url) else { return false }
+        showToast("To \(action), add this file's folder with Open a Folder (⌘O)", symbol: "folder.badge.plus")
+        return true
+    }
+
+    func removeOpenedFile(_ url: URL) {
+        if url == selectedSheet { saveNow(); selectedSheet = nil }
+        library.removeOpenedFile(url)
+        showToast("Removed from Wren. The file is still in its folder.", symbol: "doc.badge.ellipsis")
+    }
+
+    /// Files opened with Wren from Finder (Open With, a double-click, a drop on the Dock icon).
+    /// One inside a library folder simply opens there; any other is remembered on its own.
+    func openFromFinder(_ urls: [URL]) {
+        var files = urls.filter { $0.isFileURL && LibraryStore.markdownExtensions.contains($0.pathExtension.lowercased()) }
+        if let large = files.first(where: LibraryStore.isTooLarge) {
+            showToast("“\(large.lastPathComponent)” is too large for Wren (over 20 MB)", symbol: "exclamationmark.triangle.fill")
+            files.removeAll(where: LibraryStore.isTooLarge)
+            if files.isEmpty { return }
+        }
+        guard let file = files.last else {
+            if !urls.isEmpty { showToast("Wren opens Markdown and plain-text files", symbol: "doc.text") }
+            return
+        }
+        openedFromFinder = true
+        for extra in files where !library.sheets.contains(where: { LibraryStore.samePath($0.url, extra) }) {
+            library.addOpenedFile(extra)
+        }
+        guard let sheet = library.sheets.first(where: { LibraryStore.samePath($0.url, file) }) else {
+            showToast("Couldn't open “\(file.lastPathComponent)”", symbol: "exclamationmark.triangle.fill")
+            return
+        }
+        searchText = ""
+        if !library.sheets(for: sidebarSelection, search: "").contains(where: { $0.url == sheet.url }) { sidebarSelection = .all }
+        navigatorPage = .sheets
+        selectedSheet = sheet.url
+        showWelcome = false
+        if library.isOpenedFile(sheet.url), text.contains("![") {
+            showToast("To see this file's pictures, add its folder with Open a Folder (⌘O)", symbol: "photo")
+        }
+    }
+
+    /// Adds a folder of Markdown files from anywhere on the Mac and goes straight to it,
+    /// opening its first sheet (and leaving the welcome page, if that's where it was chosen).
     func addFolder() {
-        if let url = library.addFolderWithPanel() { sidebarSelection = .folder(url) }
+        guard let url = library.addFolderWithPanel() else { return }
+        sidebarSelection = .folder(url)
+        searchText = ""
+        navigatorPage = .sheets
+        showWelcome = false
+        if let first = library.sheets(for: .folder(url), search: "").first {
+            selectedSheet = first.url
+        } else {
+            showToast("No Markdown files in that folder yet. Press ⌘N to start one there.", symbol: "folder")
+        }
     }
 
     func revealInFinder(_ url: URL) {
@@ -1224,7 +1302,7 @@ final class AppModel {
     /// Copies media into the `assets` folder beside `sheet` (the main sheet by default) and
     /// returns the Markdown that links it.
     func importImages(_ sources: [ImageSource], for sheet: URL? = nil) -> [String] {
-        guard let url = sheet ?? loadedURL else { return [] }
+        guard let url = sheet ?? loadedURL, !refuseForOpenedFile(url, "add pictures") else { return [] }
         var snippets: [String] = []
         var videos = 0
         for source in sources {
@@ -1250,12 +1328,19 @@ final class AppModel {
         let drawing: WrenDrawing
         /// The picture being edited; nil for a new drawing.
         let image: URL?
-        let sheet: URL
+        /// The sheet it goes into; nil makes a new sheet for it when it's inserted.
+        let sheet: URL?
     }
 
     func newDrawing() {
-        guard let sheet = loadedURL else { return }
+        guard let sheet = loadedURL, !refuseForOpenedFile(sheet, "add drawings") else { return }
         drawingSession = DrawingSession(drawing: WrenDrawing(), image: nil, sheet: sheet)
+    }
+
+    /// A sketch that becomes a sheet of its own, for starting from the welcome page where
+    /// no sheet has been chosen. Nothing is created unless it's inserted.
+    func newSketchSheet() {
+        drawingSession = DrawingSession(drawing: WrenDrawing(), image: nil, sheet: nil)
     }
 
     func editDrawing(_ image: URL) {
@@ -1276,16 +1361,29 @@ final class AppModel {
                 ImagePreviewCache.shared.invalidate(image)
                 editorCoordinator?.restyleForImages()
                 showToast("Drawing saved", symbol: "scribble.variable")
-            } else {
-                let folder = session.sheet.deletingLastPathComponent().appendingPathComponent(ImageImporter.folderName, isDirectory: true)
+            } else if let sheet = session.sheet {
+                let folder = sheet.deletingLastPathComponent().appendingPathComponent(ImageImporter.folderName, isDirectory: true)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let image = DrawingFiles.newImageURL(in: folder)
                 try DrawingFiles.save(drawing, image: image)
-                guard session.sheet == loadedURL else {
+                guard sheet == loadedURL else {
                     showToast("Drawing saved to the assets folder", symbol: "scribble.variable")
                     return
                 }
                 editor?.insertBlock("![Drawing](\(ImageImporter.folderName)/\(image.lastPathComponent))")
+            } else {
+                // A sheet of its own, holding the sketch, ready for words around it.
+                saveNow()
+                let folder = targetFolder
+                let assets = folder.appendingPathComponent(ImageImporter.folderName, isDirectory: true)
+                try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+                let image = DrawingFiles.newImageURL(in: assets)
+                try DrawingFiles.save(drawing, image: image)
+                let text = "# Sketch\n\n![Sketch](\(ImageImporter.folderName)/\(image.lastPathComponent))\n\n"
+                let url = try library.createSheet(in: folder, named: "Sketch", text: text)
+                if case .folder = sidebarSelection {} else { sidebarSelection = .all }
+                searchText = ""
+                selectedSheet = url
             }
         } catch {
             showToast("Couldn't save the drawing: \(error.localizedDescription)", symbol: "exclamationmark.triangle.fill")

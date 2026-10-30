@@ -82,6 +82,19 @@ nonisolated struct InkColor: Codable, Equatable, Hashable {
         InkColor(hex: 0xD49A1E), // ochre
     ]
     static let ink = palette[0]
+
+    /// What the color is called, for tooltips and VoiceOver.
+    var name: String {
+        switch hex {
+        case 0x1F1D1A: "Sumi Ink"
+        case 0x6E6A64: "Graphite"
+        case 0xC8442A: "Vermilion"
+        case 0x3448A8: "Indigo"
+        case 0x1E7A6E: "Teal"
+        case 0xD49A1E: "Ochre"
+        default: "Ink"
+        }
+    }
     /// The paper every drawing is made on, so it reads the same on light and dark pages.
     static let paper = InkColor(hex: 0xFBF9F4)
 }
@@ -133,14 +146,46 @@ nonisolated enum DrawingFiles {
             && FileManager.default.fileExists(atPath: sidecar(for: image).path)
     }
 
+    /// Limits on what a drawing file may ask for. Drawings can arrive in shared folders, so
+    /// a damaged or hostile file must not be able to exhaust memory or hang the app.
+    static let maxFileBytes = 32 * 1024 * 1024
+    static let maxCanvasSide = 8192.0
+    static let maxStrokes = 20_000
+    static let maxPoints = 2_000_000
+
     static func load(image: URL) throws -> WrenDrawing {
-        let drawing = try JSONDecoder().decode(WrenDrawing.self, from: Data(contentsOf: sidecar(for: image)))
+        let file = sidecar(for: image)
+        let bytes = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        guard bytes <= maxFileBytes else { throw DrawingError.damaged }
+        let drawing = try JSONDecoder().decode(WrenDrawing.self, from: Data(contentsOf: file))
         guard drawing.version <= WrenDrawing.currentVersion else { throw DrawingError.newerVersion }
-        return drawing
+        return try validated(drawing)
+    }
+
+    /// The drawing if it's within bounds, with any unusable points dropped.
+    static func validated(_ drawing: WrenDrawing) throws -> WrenDrawing {
+        guard drawing.width.isFinite, drawing.height.isFinite,
+              (16...maxCanvasSide).contains(drawing.width), (16...maxCanvasSide).contains(drawing.height),
+              drawing.strokes.count <= maxStrokes,
+              drawing.strokes.reduce(0, { $0 + $1.points.count }) <= maxPoints
+        else { throw DrawingError.damaged }
+        var clean = drawing
+        clean.strokes = drawing.strokes.compactMap { stroke in
+            guard stroke.size.isFinite, stroke.size > 0 else { return nil }
+            var stroke = stroke
+            stroke.size = min(stroke.size, 50)
+            stroke.points = stroke.points.compactMap { p in
+                guard p.x.isFinite, p.y.isFinite, p.time.isFinite else { return nil }
+                return InkPoint(x: p.x, y: p.y, pressure: p.pressure.isFinite ? min(max(p.pressure, 0), 1) : 0.6, time: p.time)
+            }
+            return stroke.points.isEmpty ? nil : stroke
+        }
+        return clean
     }
 
     /// Writes the picture first, then the strokes, each atomically.
     static func save(_ drawing: WrenDrawing, image: URL, scale: Double = 2) throws {
+        let drawing = try validated(drawing)
         guard let png = InkRenderer.pngData(drawing, scale: scale) else { throw DrawingError.renderFailed }
         try png.write(to: image, options: .atomic)
         let encoder = JSONEncoder()
@@ -166,12 +211,13 @@ nonisolated enum DrawingFiles {
 }
 
 nonisolated enum DrawingError: LocalizedError {
-    case renderFailed, newerVersion
+    case renderFailed, newerVersion, damaged
 
     var errorDescription: String? {
         switch self {
         case .renderFailed: "The drawing couldn't be turned into a picture."
         case .newerVersion: "This drawing was made with a newer version of Wren."
+        case .damaged: "This drawing's file is damaged or too large to open."
         }
     }
 }

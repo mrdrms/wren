@@ -272,9 +272,19 @@ private struct SheetsPage: View {
             // a single pick opens anything.
             .onChange(of: selection) { _, picked in
                 if picked.count == 1, let url = picked.first, url != model.selectedSheet { model.selectedSheet = url }
+                // Picking the open sheet while the welcome page is up goes back to writing it.
+                if model.showWelcome, picked.count == 1, picked.first == model.selectedSheet { model.showWelcome = false }
             }
             .onChange(of: model.selectedSheet, initial: true) { _, url in
-                if let url, !selection.contains(url) { selection = [url] }
+                // Nothing is highlighted under the welcome page, so any sheet can be picked from it.
+                if !model.showWelcome, let url, !selection.contains(url) { selection = [url] }
+            }
+            .onChange(of: model.showWelcome) { _, welcome in
+                if welcome {
+                    selection = []
+                } else if let url = model.selectedSheet, !selection.contains(url) {
+                    selection = [url]
+                }
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -313,6 +323,7 @@ private struct SearchField: View {
                     Image(systemName: "xmark.circle.fill")
                 }
                 .buttonStyle(.plain)
+                .help("Clear the search")
                 .foregroundStyle(.tertiary)
             }
         }
@@ -382,6 +393,17 @@ private struct SheetMenu: View {
             Button("Open Beside") { model.openBeside(sheet.url) }
             Divider()
         }
+        if model.library.isOpenedFile(sheet.url) {
+            // Opened from Finder: Wren may edit the file, but not its folder.
+            Button("Show in Finder") { model.revealInFinder(sheet.url) }
+            Divider()
+            Button("Remove from Wren") { model.removeOpenedFile(sheet.url) }
+        } else {
+            regularItems
+        }
+    }
+
+    @ViewBuilder private var regularItems: some View {
         Button("Rename…") { model.beginRename(sheet.url) }
         Button("Duplicate") { model.duplicate(sheet.url) }
         Menu("Move To") {
@@ -396,7 +418,6 @@ private struct SheetMenu: View {
         Divider()
         Button("Move to Trash", role: .destructive) { model.trash(sheet.url) }
     }
-
 }
 
 extension SheetsPage {

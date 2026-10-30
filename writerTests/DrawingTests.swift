@@ -200,3 +200,60 @@ struct MediaSizeTests {
         #expect(MarkdownImage.Width.points(900).resolved(in: 600) == 600)
     }
 }
+
+struct DrawingSafetyTests {
+    @Test func absurdCanvasesAreRefused() {
+        var drawing = WrenDrawing()
+        drawing.width = 1_000_000_000
+        #expect(throws: DrawingError.self) { try DrawingFiles.validated(drawing) }
+        drawing.width = .nan
+        #expect(throws: DrawingError.self) { try DrawingFiles.validated(drawing) }
+    }
+
+    @Test func tooManyStrokesAreRefused() {
+        var drawing = WrenDrawing()
+        let stroke = InkStroke(tool: .pen, color: .ink, size: 3, points: [InkPoint(x: 1, y: 1, pressure: 0.5, time: 0)])
+        drawing.strokes = Array(repeating: stroke, count: DrawingFiles.maxStrokes + 1)
+        #expect(throws: DrawingError.self) { try DrawingFiles.validated(drawing) }
+    }
+
+    @Test func unusablePointsAreDroppedAndPressureKeptInRange() throws {
+        var drawing = WrenDrawing()
+        drawing.strokes = [
+            InkStroke(tool: .pen, color: .ink, size: 3, points: [
+                InkPoint(x: .infinity, y: 1, pressure: 0.5, time: 0),
+                InkPoint(x: 10, y: 10, pressure: 7, time: 0.1),
+            ]),
+            InkStroke(tool: .pen, color: .ink, size: .nan, points: [InkPoint(x: 1, y: 1, pressure: 0.5, time: 0)]),
+        ]
+        let clean = try DrawingFiles.validated(drawing)
+        #expect(clean.strokes.count == 1)
+        #expect(clean.strokes[0].points.count == 1)
+        #expect(clean.strokes[0].points[0].pressure == 1)
+    }
+
+    @Test func oversizedFilesAreRefusedBeforeReading() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("wren-safety-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let image = folder.appendingPathComponent("big.png")
+        let sidecar = DrawingFiles.sidecar(for: image)
+        FileManager.default.createFile(atPath: sidecar.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: sidecar)
+        try handle.truncate(atOffset: UInt64(DrawingFiles.maxFileBytes + 1))
+        try handle.close()
+        #expect(throws: DrawingError.self) { try DrawingFiles.load(image: image) }
+    }
+
+    @Test func onlyPlainRelativePathsCountAsBesideTheSheet() {
+        #expect(MarkdownImage.isLocalRelative("assets/drawing.png"))
+        #expect(MarkdownImage.isLocalRelative("assets/my%20drawing.png"))
+        #expect(!MarkdownImage.isLocalRelative("../elsewhere/picture.png"))
+        #expect(!MarkdownImage.isLocalRelative("assets/../../picture.png"))
+        #expect(!MarkdownImage.isLocalRelative("assets/%2E%2E/%2E%2E/picture.png"))
+        #expect(!MarkdownImage.isLocalRelative("/Users/someone/picture.png"))
+        #expect(!MarkdownImage.isLocalRelative("~/picture.png"))
+        #expect(!MarkdownImage.isLocalRelative("file:///etc/picture.png"))
+        #expect(!MarkdownImage.isLocalRelative("https://example.com/picture.png"))
+    }
+}
