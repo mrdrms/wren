@@ -308,10 +308,36 @@ private struct EmptyEditor: View {
                     .keyboardShortcut(.defaultAction)
                 Button("Choose a Template") { model.showTemplates = true }
                     .buttonStyle(.glass)
+                    .tint(nil)
             }
             .controlSize(.large)
+            HStack(spacing: 22) {
+                KeyHint(keys: "⌘K", label: "Commands")
+                KeyHint(keys: "⌥⌘N", label: "Templates")
+                KeyHint(keys: "⌘⇧J", label: "Your garden")
+            }
+            .padding(.top, 14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A shortcut in a little key cap, with what it does beside it.
+private struct KeyHint: View {
+    let keys: String
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(keys)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.primary.opacity(0.06), in: .rect(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary.opacity(0.1)))
+            Text(label).font(.callout)
+        }
+        .foregroundStyle(.secondary)
     }
 }
 

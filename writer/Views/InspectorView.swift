@@ -7,14 +7,10 @@ struct InspectorView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            Picker("Inspector", selection: $model.inspectorTab) {
-                ForEach(InspectorTab.allCases) { tab in
-                    Image(systemName: tab.symbol).help(tab.label).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(12)
+            InspectorTabBar(selection: $model.inspectorTab)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 14)
 
             ScrollView {
                 Group {
@@ -34,6 +30,56 @@ struct InspectorView: View {
             }
         }
         .inspectorColumnWidth(min: 250, ideal: 290, max: 380)
+    }
+}
+
+/// Seven tools in a quiet row of icons, with the name of the open one spelled out beneath,
+/// so the strip stays compact without leaving anyone guessing.
+private struct InspectorTabBar: View {
+    @Binding var selection: InspectorTab
+    @Environment(AppModel.self) private var model
+    @State private var hovered: InspectorTab?
+
+    var body: some View {
+        let accent = model.prefs.theme.accentColor
+        VStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(InspectorTab.allCases) { tab in
+                    let active = tab == selection
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { selection = tab }
+                    } label: {
+                        Image(systemName: tab.symbol)
+                            .font(.system(size: 13, weight: active ? .semibold : .regular))
+                            .foregroundStyle(active ? accent : Color.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                            .background {
+                                if active {
+                                    RoundedRectangle(cornerRadius: 8).fill(accent.opacity(0.15))
+                                } else if hovered == tab {
+                                    RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06))
+                                }
+                            }
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovered = $0 ? tab : (hovered == tab ? nil : hovered) }
+                    .help(tab.label)
+                    .accessibilityLabel(tab.label)
+                    .accessibilityAddTraits(active ? .isSelected : [])
+                }
+            }
+            .padding(3)
+            .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 11))
+
+            Text(selection.label.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1.2)
+                .foregroundStyle(.secondary)
+                .contentTransition(.opacity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 4)
+        }
     }
 }
 

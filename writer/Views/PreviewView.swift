@@ -89,6 +89,7 @@ struct PreviewPane: View {
                     Image(systemName: model.zen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                 }
                 .buttonStyle(.glass)
+                .tint(nil) // Export is the one prominent action here.
                 .help(model.zen ? "Leave Zen (Esc)" : "Read it alone: hide everything else (⌘⇧↩)")
 
                 Button {
