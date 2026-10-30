@@ -114,6 +114,8 @@ struct ToolsMenu: View {
                 Button("Take Snapshot") { model.takeSnapshot() }
                 Button("Cutting Room Floor") { model.inspectorTab = .cuts; model.showInspector = true }
             }
+            Divider()
+            SettingsLink { Text("Settings…") }
         } label: {
             Label("Tools", systemImage: "wand.and.stars")
         }

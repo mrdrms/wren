@@ -55,6 +55,7 @@ private struct LibraryPage: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("New folder, project or library location")
+                SettingsButton()
             }
             .padding(.horizontal, 18)
             .padding(.top, 8)
@@ -204,6 +205,7 @@ private struct SheetsPage: View {
                     .buttonStyle(.borderless)
                     .fixedSize()
                     .help("New sheet (⌘N). Hold for templates (⌥⌘N).")
+                    SettingsButton()
                 }
                 .padding(.leading, -6)
 
@@ -458,6 +460,18 @@ struct StreakCard: View {
         .buttonStyle(.plain)
         .themedGlass(in: .rect(cornerRadius: 14), interactive: true)
         .help("Open your Writing Garden (⌘⇧J)")
+    }
+}
+
+/// Settings, a click away: themes, fonts, goals and the rest.
+struct SettingsButton: View {
+    var body: some View {
+        SettingsLink {
+            Image(systemName: "gearshape")
+        }
+        .buttonStyle(.borderless)
+        .help("Settings: themes, fonts, goals and more (⌘,)")
+        .accessibilityLabel("Settings")
     }
 }
 
