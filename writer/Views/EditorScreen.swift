@@ -11,6 +11,10 @@ struct EditorScreen: View {
         ZStack(alignment: .bottom) {
             AtmosphereView(theme: theme, animated: prefs.ambient, continuous: true)
                 .ignoresSafeArea()
+            // Plain themes get a desk for the page to lie on; scenes are their own desk.
+            if theme.atmosphere == .none {
+                theme.deskColor.ignoresSafeArea()
+            }
 
             if model.loadedURL != nil {
                 GeometryReader { proxy in
@@ -155,7 +159,7 @@ extension EditorScreen {
     @ViewBuilder
     var writingColumn: some View {
         ZStack(alignment: .bottom) {
-            PageBand(theme: model.prefs.theme, lineWidth: model.prefs.lineWidth)
+            PaperSheet(theme: model.prefs.theme, lineWidth: model.prefs.lineWidth)
                 .opacity(model.boardMode ? 0 : 1)
 
             // The format bar gets its own row, so text never scrolls underneath it.
@@ -275,9 +279,12 @@ struct StatusHUD: View {
                 MomentumFlame(level: model.momentum.level(at: context.date))
             }
         }
-        .font(.callout.weight(.medium))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
+        // Set like a running head: small capitals, letter-spaced.
+        .font(.system(size: 11, weight: .semibold))
+        .textCase(.uppercase)
+        .tracking(1.1)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
         .themedGlass(in: .capsule, interactive: true)
     }
 
@@ -341,27 +348,74 @@ private struct KeyHint: View {
     }
 }
 
-/// A soft column of page color under the text, so the scene stays alive in the margins
-/// but never competes with the words.
-struct PageBand: View {
+/// The sheet the words sit on: a real page lying on the desk, with an edge, a little grain and
+/// a soft shadow. It runs past the top and bottom of the window, like paper fed through a
+/// typewriter, and the scene stays alive in the margins around it.
+struct PaperSheet: View {
     let theme: Theme
     let lineWidth: Double
 
     var body: some View {
         GeometryReader { proxy in
-            let width = min(proxy.size.width, lineWidth + 90)
-            let strength = theme.isDark ? 0.6 : 0.7
-            LinearGradient(stops: [
-                .init(color: theme.bg.opacity(0), location: 0),
-                .init(color: theme.bg.opacity(strength), location: 0.1),
-                .init(color: theme.bg.opacity(strength), location: 0.9),
-                .init(color: theme.bg.opacity(0), location: 1),
-            ], startPoint: .leading, endPoint: .trailing)
-            .frame(width: width)
+            let width = min(proxy.size.width - 32, lineWidth + 176)
+            ZStack {
+                Rectangle().fill(theme.paperColor)
+                PaperGrain(dark: theme.isDark)
+            }
+            .frame(width: max(0, width))
+            .padding(.vertical, -40)
+            .overlay {
+                Rectangle()
+                    .strokeBorder(theme.isDark ? Color.white.opacity(0.06) : Color.black.opacity(0.06), lineWidth: 1)
+                    .padding(.vertical, -40)
+            }
+            .shadow(color: .black.opacity(theme.isDark ? 0.55 : 0.09), radius: theme.isDark ? 30 : 22, y: 0)
+            .shadow(color: .black.opacity(theme.isDark ? 0.3 : 0.05), radius: 2, y: 0)
             .frame(maxWidth: .infinity)
         }
-        .ignoresSafeArea()
+        // Only up and down: sideways it centers on the text, not under the sidebar.
+        .ignoresSafeArea(edges: .vertical)
         .allowsHitTesting(false)
+    }
+}
+
+/// Fine paper grain: a tile of soft noise, made once and laid over the page.
+struct PaperGrain: View {
+    let dark: Bool
+
+    private static let tile: NSImage = {
+        let size = 160
+        let image = NSImage(size: NSSize(width: size, height: size))
+        image.lockFocus()
+        var rng = SplitMix(seed: 0x57A3)
+        for _ in 0..<(size * size / 3) {
+            let x = Double(rng.next() % UInt64(size)), y = Double(rng.next() % UInt64(size))
+            let shade = Double(rng.next() % 1000) / 1000
+            NSColor(white: shade, alpha: 0.5).setFill()
+            NSRect(x: x, y: y, width: 1, height: 1).fill()
+        }
+        image.unlockFocus()
+        return image
+    }()
+
+    var body: some View {
+        Rectangle()
+            .fill(ImagePaint(image: Image(nsImage: Self.tile), scale: 0.5))
+            .opacity(dark ? 0.05 : 0.07)
+            .blendMode(dark ? .screen : .multiply)
+    }
+}
+
+/// A tiny seeded generator, so the grain is the same every launch.
+struct SplitMix {
+    var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
     }
 }
 

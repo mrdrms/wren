@@ -61,6 +61,15 @@ struct Theme: Identifiable, Equatable {
     var leafColor: Color { Color(nsColor: leaf) }
     var colorScheme: ColorScheme { isDark ? .dark : .light }
 
+    /// The page the words sit on. Dark themes lift it a touch off the desk.
+    var paperColor: Color {
+        isDark ? Color(nsColor: background.blended(withFraction: 0.035, of: .white) ?? background) : bg
+    }
+    /// The desk under the page: a shade deeper than the paper, in the paper's own hue.
+    var deskColor: Color {
+        isDark ? bg : Color(nsColor: background.blended(withFraction: 0.07, of: text) ?? background)
+    }
+
     // Four light, four dark. Plain pages first: the words are the point.
     static let all: [Theme] = [
         Theme(id: "paper", name: "Paper", tagline: "Warm off-white, soft ink", isDark: false,

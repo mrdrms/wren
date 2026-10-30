@@ -209,10 +209,11 @@ private struct SheetsPage: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.listTitle)
-                        .font(.system(size: 22, weight: .semibold, design: .serif))
+                        .font(.system(size: 26, weight: .medium, design: .serif))
                         .lineLimit(1)
-                    Text("\(sheets.count) \(sheets.count == 1 ? "sheet" : "sheets") · \(sheets.reduce(0) { $0 + $1.words }.formatted()) words")
-                        .font(.caption)
+                    Text("\(sheets.count) \(sheets.count == 1 ? "sheet" : "sheets") · \(sheets.reduce(0) { $0 + $1.words }.formatted()) words".uppercased())
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.1)
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                 }
@@ -249,8 +250,8 @@ private struct SheetsPage: View {
                         .selectionDisabled()
                         .padding(.vertical, 4)
                 }
-                ForEach(sheets) { sheet in
-                    SheetRow(sheet: sheet)
+                ForEach(Array(sheets.enumerated()), id: \.element.id) { index, sheet in
+                    SheetRow(sheet: sheet, number: index + 1)
                         .tag(sheet.url)
                         .draggable(sheet.url)
                 }
@@ -324,31 +325,43 @@ private struct SearchField: View {
     }
 }
 
+/// A sheet as an entry in a table of contents: its number, its title, a line of it,
+/// and when and how long, set small like a running head.
 private struct SheetRow: View {
     let sheet: Sheet
+    let number: Int
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(sheet.title)
-                .font(.system(size: 14, weight: .semibold, design: .serif))
-                .lineLimit(1)
-            if !sheet.preview.isEmpty {
-                Text(sheet.preview)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(number < 10 ? "0\(number)" : "\(number)")
+                .font(.system(size: 11, weight: .medium, design: .serif).monospacedDigit())
+                .foregroundStyle(model.prefs.theme.accentColor.opacity(0.85))
+                .frame(width: 18, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(sheet.title)
+                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                    .lineLimit(1)
+                if !sheet.preview.isEmpty {
+                    Text(sheet.preview)
+                        .font(.system(size: 12.5, design: .serif).italic())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                HStack(spacing: 5) {
+                    Text(sheet.modified, format: .relative(presentation: .named))
+                    Text("·")
+                    Text(sheet.words == 1 ? "1 word" : "\(sheet.words.formatted()) words")
+                }
+                .textCase(.uppercase)
+                .font(.system(size: 9.5, weight: .semibold))
+                .tracking(0.9)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 2)
             }
-            HStack(spacing: 5) {
-                Text(sheet.modified, format: .relative(presentation: .named))
-                Text("·")
-                Text(sheet.words == 1 ? "1 word" : "\(sheet.words.formatted()) words")
-            }
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            .padding(.top, 1)
         }
-        .padding(.vertical, 7)
-        .padding(.horizontal, 4)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 2)
     }
 }
 

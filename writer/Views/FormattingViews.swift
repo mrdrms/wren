@@ -51,8 +51,10 @@ struct FormatBar: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 84)
+                .font(.system(size: 10.5, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(1)
+                .frame(width: 92)
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -110,7 +112,9 @@ struct InsertMenu: View {
             }
         } label: {
             Label("Insert", systemImage: "plus")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 10.5, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(1)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
