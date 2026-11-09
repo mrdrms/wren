@@ -27,9 +27,12 @@ nonisolated enum InkRenderer {
         context.saveGState()
         defer { context.restoreGState() }
         // One layer per stroke, so a see-through marker stays even where its segments overlap.
-        context.setAlpha(stroke.tool.opacity)
+        // Pencils show in light "non-photo blue", like a comic artist's roughs, so inks over
+        // them stand out. They never print.
+        let pencil = stroke.onLayer == .pencil
+        context.setAlpha(stroke.tool.opacity * (pencil ? 0.75 : 1))
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        let color = stroke.color.cgColor()
+        let color = pencil ? InkColor(hex: 0x7FB2E5).cgColor() : stroke.color.cgColor()
         context.setFillColor(color)
         context.setStrokeColor(color)
         context.setLineCap(.round)

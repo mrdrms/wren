@@ -81,16 +81,19 @@ struct LayerBar: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            Divider().frame(height: 16)
             ForEach(InkLayer.allCases.reversed()) { layer in
                 Button { editor.toggle(layer) } label: {
-                    Image(systemName: editor.drawing.isVisible(layer) ? "eye" : "eye.slash")
+                    Label(layer.label, systemImage: editor.drawing.isVisible(layer) ? "eye" : "eye.slash")
+                        .font(.caption)
+                        .foregroundStyle(editor.drawing.isVisible(layer) ? .primary : .secondary)
                 }
                 .buttonStyle(.borderless)
                 .help("\(editor.drawing.isVisible(layer) ? "Hide" : "Show") \(layer.label.lowercased())")
                 .accessibilityLabel("\(editor.drawing.isVisible(layer) ? "Hide" : "Show") \(layer.label)")
             }
             Spacer(minLength: 8)
-            Text(editor.layer == .pencil ? "Pencils are for roughs and don't print." : editor.layer == .color ? "Colors sit under the inks." : "")
+            Text(editor.layer == .pencil ? "Pencils show in blue and don't print." : editor.layer == .color ? "Colors sit under the inks." : "")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
