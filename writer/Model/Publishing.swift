@@ -249,7 +249,7 @@ enum Publisher {
         ]]]
         request.jsonBody(body)
         let json = try await send(request)
-        return ((json["posts"] as? [[String: Any]])?.first?["url"] as? String).flatMap(URL.init(string:))
+        return ((json["posts"] as? [[String: Any]])?.first?["url"] as? String).flatMap(Publisher.webLink)
     }
 
     // MARK: WordPress
@@ -265,7 +265,7 @@ enum Publisher {
         request.setValue(basicAuth(account.username, secret), forHTTPHeaderField: "Authorization")
         request.jsonBody(["title": post.title, "content": MarkdownHTML.convert(markdown), "status": draft ? "draft" : "publish"])
         let json = try await send(request)
-        return (json["link"] as? String).flatMap(URL.init(string:))
+        return (json["link"] as? String).flatMap(Publisher.webLink)
     }
 
     // MARK: Micro.blog (Micropub)
@@ -282,7 +282,7 @@ enum Publisher {
         let (data, response) = try await Safety.credentialSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw PublishError.server("No response from Micro.blog.") }
         guard (200..<300).contains(http.statusCode) else { throw PublishError.server(serverMessage(data, status: http.statusCode)) }
-        return http.value(forHTTPHeaderField: "Location").flatMap(URL.init(string:))
+        return http.value(forHTTPHeaderField: "Location").flatMap(Publisher.webLink)
     }
 
     private static func formEncode(_ value: String) -> String {
@@ -301,7 +301,7 @@ enum Publisher {
         let tags = post.tags.map { $0.lowercased().filter { $0.isLetter || $0.isNumber } }.filter { !$0.isEmpty }.prefix(4)
         request.jsonBody(["article": ["title": post.title, "body_markdown": markdown, "published": !draft, "tags": Array(tags)]])
         let json = try await send(request)
-        return (json["url"] as? String).flatMap(URL.init(string:))
+        return (json["url"] as? String).flatMap(Publisher.webLink)
     }
 
     // MARK: Hashnode (GraphQL)
@@ -324,7 +324,7 @@ enum Publisher {
         publishInput["tags"] = [] as [Any]
         let result = try await hashnode(secret, query: "mutation PublishPost($input: PublishPostInput!) { publishPost(input: $input) { post { url } } }",
                                         variables: ["input": publishInput])
-        return (((result["publishPost"] as? [String: Any])?["post"] as? [String: Any])?["url"] as? String).flatMap(URL.init(string:))
+        return (((result["publishPost"] as? [String: Any])?["post"] as? [String: Any])?["url"] as? String).flatMap(Publisher.webLink)
     }
 
     private static func hashnode(_ token: String, query: String, variables: [String: Any]) async throws -> [String: Any] {
@@ -340,6 +340,13 @@ enum Publisher {
     }
 
     // MARK: HTTP
+
+    /// A link a server sent back, kept only if it's an ordinary web address: a reply can't
+    /// make Wren open a file or another app.
+    static func webLink(_ s: String) -> URL? {
+        guard let url = URL(string: s), let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http", url.host != nil else { return nil }
+        return url
+    }
 
     private static func send(_ request: URLRequest) async throws -> [String: Any] {
         let (data, response) = try await Safety.credentialSession.data(for: request)

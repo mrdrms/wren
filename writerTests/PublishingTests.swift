@@ -116,3 +116,14 @@ struct SafetyTests {
         #expect(PublishAccount(platform: .wordpress, site: "blog.example.com/wp-admin/").baseURL == "https://blog.example.com")
     }
 }
+
+import Testing
+
+struct ServerLinkTests {
+    @Test func onlyWebLinksAreOpened() {
+        #expect(Publisher.webLink("https://blog.example/post") != nil)
+        #expect(Publisher.webLink("file:///etc/passwd") == nil)
+        #expect(Publisher.webLink("javascript:alert(1)") == nil)
+        #expect(Publisher.webLink("x-apple-reminder://") == nil)
+    }
+}

@@ -35,8 +35,9 @@ nonisolated enum Safety {
         return URLSession(configuration: configuration, delegate: SameHostRedirects(), delegateQueue: nil)
     }()
 
-    private final class SameHostRedirects: NSObject, URLSessionTaskDelegate {
-        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+    // URLSession calls this on its own queue, not the main thread.
+    private nonisolated final class SameHostRedirects: NSObject, URLSessionTaskDelegate {
+        nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                         newRequest request: URLRequest) async -> URLRequest? {
             let from = task.originalRequest?.url, to = request.url
             guard let from, let to, from.host?.lowercased() == to.host?.lowercased(),
