@@ -17,7 +17,7 @@ nonisolated enum InkRenderer {
             context.setFillColor(paper.cgColor())
             context.fill(CGRect(origin: .zero, size: drawing.size))
         }
-        for stroke in drawing.strokes { draw(stroke, in: context) }
+        for stroke in drawing.printedStrokes { draw(stroke, in: context) }
     }
 
     static func draw(_ stroke: InkStroke, in context: CGContext) {

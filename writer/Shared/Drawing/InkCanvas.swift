@@ -82,7 +82,7 @@ final class InkCanvasView: NSView {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         let scale = Double(window?.backingScaleFactor ?? 2)
         if cache == nil || cacheKey?.size != bounds.size || cacheKey?.scale != scale {
-            cache = InkViewport.cache(editor.drawing.strokes, drawingSize: editor.drawing.size, bounds: bounds, pixelScale: scale)
+            cache = InkViewport.cache(editor.drawing.visibleStrokes, drawingSize: editor.drawing.size, bounds: bounds, pixelScale: scale)
             cacheKey = (bounds.size, scale)
         }
         InkViewport.drawFrame(in: context, bounds: bounds, editor: editor, cache: cache, eraserAt: hover)
@@ -174,7 +174,7 @@ final class InkCanvasView: UIView {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         let scale = Double(window?.screen.scale ?? 2)
         if cache == nil || cacheKey?.size != bounds.size || cacheKey?.scale != scale {
-            cache = InkViewport.cache(editor.drawing.strokes, drawingSize: editor.drawing.size, bounds: bounds, pixelScale: scale)
+            cache = InkViewport.cache(editor.drawing.visibleStrokes, drawingSize: editor.drawing.size, bounds: bounds, pixelScale: scale)
             cacheKey = (bounds.size, scale)
         }
         InkViewport.drawFrame(in: context, bounds: bounds, editor: editor, cache: cache, eraserAt: nil)

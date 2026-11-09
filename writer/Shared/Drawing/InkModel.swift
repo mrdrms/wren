@@ -99,6 +99,24 @@ nonisolated struct InkColor: Codable, Equatable, Hashable {
     static let paper = InkColor(hex: 0xFBF9F4)
 }
 
+/// Where a stroke lives, bottom to top: flat color under the drawing, rough pencils, and the
+/// finished inks. Pencils are for sketching and never print.
+nonisolated enum InkLayer: String, Codable, CaseIterable, Identifiable {
+    case color, pencil, ink
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .color: "Colors"
+        case .pencil: "Pencils"
+        case .ink: "Inks"
+        }
+    }
+
+    var prints: Bool { self != .pencil }
+}
+
 nonisolated struct InkStroke: Codable, Equatable, Identifiable {
     var id = UUID()
     var tool: InkTool
@@ -106,6 +124,10 @@ nonisolated struct InkStroke: Codable, Equatable, Identifiable {
     /// The size setting it was drawn with; the tool turns it into a width.
     var size: Double
     var points: [InkPoint]
+    /// The layer it's on; strokes from before layers are inks.
+    var layer: InkLayer?
+
+    var onLayer: InkLayer { layer ?? .ink }
 
     var bounds: CGRect {
         guard let first = points.first else { return .null }
@@ -126,9 +148,23 @@ nonisolated struct WrenDrawing: Codable, Equatable {
     var height = Double(WrenDrawing.standardSize.height)
     var background: InkColor? = .paper
     var strokes: [InkStroke] = []
+    /// Layers hidden while drawing. Hidden layers don't print either.
+    var hiddenLayers: [InkLayer]?
 
     var size: CGSize { CGSize(width: width, height: height) }
     var isEmpty: Bool { strokes.isEmpty }
+
+    func isVisible(_ layer: InkLayer) -> Bool { !(hiddenLayers ?? []).contains(layer) }
+
+    /// Strokes in drawing order, layer by layer: what the canvas shows.
+    var visibleStrokes: [InkStroke] {
+        InkLayer.allCases.filter(isVisible).flatMap { layer in strokes.filter { $0.onLayer == layer } }
+    }
+
+    /// What ends up in the picture: visible layers that print.
+    var printedStrokes: [InkStroke] {
+        visibleStrokes.filter { $0.onLayer.prints }
+    }
 }
 
 /// How drawings live on disk: a PNG that every exporter, blog and app understands, with

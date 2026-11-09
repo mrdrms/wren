@@ -41,6 +41,10 @@ struct DrawingStudio: View {
 
             InkToolbar(editor: editor)
                 .padding(.horizontal, 18)
+                .padding(.bottom, 8)
+
+            LayerBar(editor: editor)
+                .padding(.horizontal, 18)
                 .padding(.bottom, 12)
 
             InkCanvas(editor: editor)
@@ -58,6 +62,36 @@ struct DrawingStudio: View {
         .confirmationDialog("Discard this drawing's changes?", isPresented: $confirmDiscard) {
             Button("Discard Changes", role: .destructive, action: onCancel)
             Button("Keep Drawing", role: .cancel) {}
+        }
+    }
+}
+
+/// Which layer the pen draws on, and which layers show. Pencils are for roughs and never
+/// print, so a sketch can be inked over its own drawing.
+struct LayerBar: View {
+    let editor: InkEditor
+
+    var body: some View {
+        @Bindable var editor = editor
+        HStack(spacing: 10) {
+            Text("Layer").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Picker("Layer", selection: $editor.layer) {
+                ForEach(InkLayer.allCases.reversed()) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            ForEach(InkLayer.allCases.reversed()) { layer in
+                Button { editor.toggle(layer) } label: {
+                    Image(systemName: editor.drawing.isVisible(layer) ? "eye" : "eye.slash")
+                }
+                .buttonStyle(.borderless)
+                .help("\(editor.drawing.isVisible(layer) ? "Hide" : "Show") \(layer.label.lowercased())")
+                .accessibilityLabel("\(editor.drawing.isVisible(layer) ? "Hide" : "Show") \(layer.label)")
+            }
+            Spacer(minLength: 8)
+            Text(editor.layer == .pencil ? "Pencils are for roughs and don't print." : editor.layer == .color ? "Colors sit under the inks." : "")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -142,7 +176,7 @@ struct InkToolbar: View {
                     .help("Redo (⇧⌘Z)")
                 Button { editor.clear() } label: { Image(systemName: "trash") }
                     .disabled(editor.drawing.isEmpty)
-                    .help("Clear the page (undoable)")
+                    .help("Clear this layer (undoable)")
             }
             .buttonStyle(.borderless)
             .font(.system(size: 14))

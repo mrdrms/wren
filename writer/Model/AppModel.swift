@@ -849,6 +849,25 @@ final class AppModel {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    static let magpieID = "com.emredurmus.magpie"
+
+    /// Hands the open sheet to Magpie, which lays it out as a magazine and keeps following
+    /// it: edits made here show up on its pages.
+    func layOutInMagpie() {
+        guard let url = selectedSheet else { return }
+        saveNow()
+        guard let magpie = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.magpieID) else {
+            showToast("Magpie isn't installed. It turns sheets into magazines and comics.", symbol: "exclamationmark.circle")
+            if let site = URL(string: "https://github.com/mrdrms/magpie") { NSWorkspace.shared.open(site) }
+            return
+        }
+        NSWorkspace.shared.open([url], withApplicationAt: magpie, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            if let error {
+                Task { @MainActor in self.showToast("Magpie couldn't open the sheet: \(error.localizedDescription)", symbol: "exclamationmark.circle") }
+            }
+        }
+    }
+
     // MARK: Editing commands
 
     /// The editor you're typing in: the second one when it has focus, otherwise the main one.

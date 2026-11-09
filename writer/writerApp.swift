@@ -53,6 +53,10 @@ struct WrenCommands: Commands {
                 .disabled(model.loadedURL == nil)
         }
         CommandGroup(replacing: .importExport) {
+            Button("Lay Out in Magpie…") { model.layOutInMagpie() }
+                .disabled(model.selectedSheet == nil)
+                .help("Turn this sheet into a magazine in Magpie. Edits here keep showing up there.")
+            Divider()
             Button("Export as HTML…") { model.export("html") }
                 .keyboardShortcut("e")
             Button("Export as PDF…") { model.export("pdf") }

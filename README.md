@@ -66,13 +66,18 @@ Also: Sepia, White, Graphite and Black. Change it in Settings (⌘,), from the g
 Draw right in a sheet with pen, brush, marker and eraser, using pressure from a tablet or (later) Apple Pencil.
 Double-click a sketch to keep editing it. Each drawing is saved as a normal **PNG**, so it works in every export,
 blog and Markdown app, plus a small `.wrendrawing` file next to it that holds the editable strokes. The engine is
-shared code with no AppKit or UIKit dependency, ready for an iPad companion.
+shared code with no AppKit or UIKit dependency, ready for an iPad companion. Drawings have three layers, **Colors**,
+**Pencils** and **Inks**: rough it out in pencil, ink over it, and the pencils never show up in the picture.
 
 ![Drawing studio](docs/images/studio.jpg)
 
 ### Resizable media
 Drag the corner of any image, sketch or video to resize it. Sizes snap to 5% and are stored in the Markdown itself
 (`![Sketch|60%](assets/sketch.png)`, the same convention Obsidian uses), so they carry into HTML, PDF and Word.
+
+### Lay out in Magpie
+**File › Lay Out in Magpie…** hands the sheet to [Magpie](https://github.com/mrdrms/magpie), which turns it into
+magazine pages. The pages stay linked to the sheet: keep writing here and they update in Magpie.
 
 ### Preview and publish
 A live side-by-side or full preview in five blog styles (Classic, Modern, Editorial, Mono, Terminal), on a desktop

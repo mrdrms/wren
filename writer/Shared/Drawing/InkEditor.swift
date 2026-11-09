@@ -15,6 +15,8 @@ final class InkEditor {
     var tool: InkTool = .pen
     var color: InkColor = .ink
     var size: Double = InkEditor.sizes[1]
+    /// The layer new strokes go on, and the only one the eraser touches.
+    var layer: InkLayer = .ink
 
     /// The stroke under the pen right now, and where the device expects it to go next.
     private(set) var live: InkStroke?
@@ -29,7 +31,8 @@ final class InkEditor {
         case add(InkStroke)
         /// Strokes the eraser removed, with the index each had when it went.
         case erase([(index: Int, stroke: InkStroke)])
-        case clear([InkStroke])
+        /// Everything before a layer was cleared, and the layer.
+        case clear([InkStroke], InkLayer)
     }
     @ObservationIgnored private var undoStack: [Change] = [] { didSet { canUndo = !undoStack.isEmpty } }
     @ObservationIgnored private var redoStack: [Change] = [] { didSet { canRedo = !redoStack.isEmpty } }
@@ -56,8 +59,11 @@ final class InkEditor {
             return
         }
         simulatedPressure = 0.6
+        // A hidden layer can't be drawn on: show it again first.
+        if !drawing.isVisible(layer) { toggle(layer) }
         live = InkStroke(tool: tool, color: color, size: size,
-                         points: [InkPoint(x: point.x, y: point.y, pressure: pressure ?? simulatedPressure, time: time)])
+                         points: [InkPoint(x: point.x, y: point.y, pressure: pressure ?? simulatedPressure, time: time)],
+                         layer: layer == .ink ? nil : layer)
     }
 
     func move(to point: CGPoint, pressure: Double?, time: TimeInterval, predicted: [CGPoint] = []) {
@@ -124,7 +130,7 @@ final class InkEditor {
         var removed = false
         while index >= 0 {
             let stroke = drawing.strokes[index]
-            if Self.stroke(stroke, isWithin: radius, of: point) {
+            if stroke.onLayer == layer, Self.stroke(stroke, isWithin: radius, of: point) {
                 erasing.append((index, stroke))
                 drawing.strokes.remove(at: index)
                 removed = true
@@ -153,13 +159,25 @@ final class InkEditor {
         return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
     }
 
+    // MARK: Layers
+
+    /// Shows or hides a layer while drawing.
+    func toggle(_ layer: InkLayer) {
+        var hidden = Set(drawing.hiddenLayers ?? [])
+        if hidden.contains(layer) { hidden.remove(layer) } else { hidden.insert(layer) }
+        drawing.hiddenLayers = hidden.isEmpty ? nil : InkLayer.allCases.filter(hidden.contains)
+        onStrokesChanged?()
+    }
+
     // MARK: Undo
 
+    /// Clears the current layer.
     func clear() {
         cancel()
-        guard !drawing.strokes.isEmpty else { return }
-        record(.clear(drawing.strokes))
-        drawing.strokes = []
+        let layer = self.layer
+        guard drawing.strokes.contains(where: { $0.onLayer == layer }) else { return }
+        record(.clear(drawing.strokes, layer))
+        drawing.strokes.removeAll { $0.onLayer == layer }
         onStrokesChanged?()
     }
 
@@ -171,7 +189,7 @@ final class InkEditor {
             drawing.strokes.removeAll { $0.id == stroke.id }
         case .erase(let removed):
             for item in removed.reversed() { drawing.strokes.insert(item.stroke, at: min(item.index, drawing.strokes.count)) }
-        case .clear(let strokes):
+        case .clear(let strokes, _):
             drawing.strokes = strokes
         }
         redoStack.append(change)
@@ -187,8 +205,8 @@ final class InkEditor {
         case .erase(let removed):
             let ids = Set(removed.map(\.stroke.id))
             drawing.strokes.removeAll { ids.contains($0.id) }
-        case .clear:
-            drawing.strokes = []
+        case .clear(_, let layer):
+            drawing.strokes.removeAll { $0.onLayer == layer }
         }
         undoStack.append(change)
         onStrokesChanged?()
