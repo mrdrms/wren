@@ -122,7 +122,9 @@ Autosave on every pause, **snapshots** (⇧⌘S) before big rewrites, a **Time M
 - **14 sheet templates**, from Blog Post and Newsletter to Short Story, Character Profile and Query Letter.
 
 ### Optional AI editor
-Off by default. Bring your own key for Anthropic (Claude), OpenAI or Google Gemini, or run fully local with Ollama.
+Off by default. Use **Apple Intelligence** on Macs that have it (free, no key, and nothing leaves your Mac), bring
+your own key for Anthropic (Claude), OpenAI or Google Gemini, or run fully local with Ollama. Apple's on-device model
+is small: it's best for line edits and title ideas, and whole-book reads and image alt text need one of the others.
 It does line edits (as margin notes you accept or ignore), critique, continuity checks across a book, synopses and
 title ideas. **It never writes for you,** and each request is shown to you before it is sent.
 

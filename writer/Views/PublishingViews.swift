@@ -176,8 +176,13 @@ struct AISettings: View {
                 Picker("Provider", selection: $prefs.aiProvider) {
                     ForEach(AIProvider.allCases) { Text($0.label).tag($0) }
                 }
-                TextField("Model", text: Binding(get: { prefs.aiModel }, set: { prefs.aiModels[prefs.aiProvider.rawValue] = $0 }),
-                          prompt: Text(prefs.aiProvider.defaultModel))
+                if prefs.aiProvider.hasModels {
+                    TextField("Model", text: Binding(get: { prefs.aiModel }, set: { prefs.aiModels[prefs.aiProvider.rawValue] = $0 }),
+                              prompt: Text(prefs.aiProvider.defaultModel))
+                }
+                if prefs.aiProvider == .apple, let reason = AIClient.onDeviceUnavailableReason {
+                    Label(reason, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                }
                 if prefs.aiProvider.needsKey {
                     HStack {
                         SecureField("API key", text: $key, prompt: Text(hasKey ? "Saved in your Keychain" : "Paste your key"))
@@ -200,7 +205,9 @@ struct AISettings: View {
             }
             Section("Privacy") {
                 Toggle("Show me what will be sent, every time", isOn: $prefs.aiConfirmRequests)
-                Text("Nothing is sent until you ask for something. Each request carries only the passage, sheet or book it's about, straight to the provider you chose. Your key never leaves this Mac except to that provider.")
+                Text(prefs.aiProvider.isLocal
+                     ? "Nothing leaves this Mac: \(prefs.aiProvider.label) runs here. Nothing runs until you ask for something."
+                     : "Nothing is sent until you ask for something. Each request carries only the passage, sheet or book it's about, straight to the provider you chose. Your key never leaves this Mac except to that provider.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -231,7 +238,9 @@ struct AIConfirmSheet: View {
             : pending.preview
         VStack(alignment: .leading, spacing: 14) {
             Label(pending.title, systemImage: "sparkle").font(.title2.weight(.bold))
-            Text("This will be sent to \(pending.provider.label), model \(pending.model):")
+            Text(pending.provider == .apple
+                 ? "Apple Intelligence will read this here, on this Mac:"
+                 : "This will be sent to \(pending.provider.label), model \(pending.model):")
                 .foregroundStyle(.secondary)
             ScrollView {
                 Text(shown)

@@ -1,12 +1,15 @@
 import Foundation
+import FoundationModels
 
-/// AI services you can connect with your own key (or Ollama, running on this Mac).
+/// AI services you can connect with your own key, Ollama running on this Mac, or Apple
+/// Intelligence, built in.
 enum AIProvider: String, CaseIterable, Identifiable, Codable {
-    case anthropic, openai, gemini, ollama
+    case apple, anthropic, openai, gemini, ollama
 
     var id: String { rawValue }
     var label: String {
         switch self {
+        case .apple: "Apple Intelligence (on this Mac)"
         case .anthropic: "Anthropic (Claude)"
         case .openai: "OpenAI"
         case .gemini: "Google Gemini"
@@ -16,16 +19,22 @@ enum AIProvider: String, CaseIterable, Identifiable, Codable {
     /// A sensible starting model; any model the service offers can be typed in instead.
     var defaultModel: String {
         switch self {
+        case .apple: "on-device"
         case .anthropic: "claude-opus-5-5"
         case .openai: "gpt-5"
         case .gemini: "gemini-2.5-pro"
         case .ollama: "llama3.1"
         }
     }
-    var needsKey: Bool { self != .ollama }
+    var needsKey: Bool { self != .ollama && self != .apple }
+    /// Whether requests stay on this Mac.
+    var isLocal: Bool { self == .ollama || self == .apple }
+    /// Whether you can pick a model.
+    var hasModels: Bool { self != .apple }
     var keychainKey: String { "ai-\(rawValue)" }
     var keyHelp: String {
         switch self {
+        case .apple: "Built into Macs with Apple Intelligence: free, private, and nothing leaves this Mac. It's a small model, best for line edits and title ideas; a whole book is too long for it, and it can't look at pictures."
         case .anthropic: "Create a key at platform.claude.com → API Keys."
         case .openai: "Create a key at platform.openai.com → API keys."
         case .gemini: "Create a key in Google AI Studio → Get API key."
@@ -63,6 +72,7 @@ struct AIClient {
     }
 
     func complete(system: String, prompt: String, image: (data: Data, mime: String)? = nil) async throws -> String {
+        if provider == .apple { return try await Self.onDevice(system: system, prompt: prompt, image: image) }
         if provider.needsKey && (key ?? "").isEmpty { throw AIError.missingKey(provider) }
         let request = try makeRequest(system: system, prompt: prompt, image: image)
         // Ollama is local; everything else carries a key and must not follow redirects elsewhere.
@@ -73,6 +83,45 @@ struct AIClient {
         let text = try parse(json)
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIError.empty }
         return text
+    }
+
+    /// Apple's on-device model. It reads a few pages at a time, so longer requests are turned
+    /// away up front with a clear reason instead of failing after a wait.
+    static let onDeviceLimit = 12_000
+
+    static var onDeviceUnavailableReason: String? {
+        switch SystemLanguageModel.default.availability {
+        case .available: return nil
+        case .unavailable(.deviceNotEligible): return "This Mac can't run Apple Intelligence. Choose another service in Settings → AI."
+        case .unavailable(.appleIntelligenceNotEnabled): return "Turn on Apple Intelligence in System Settings, or choose another service in Settings → AI."
+        case .unavailable(.modelNotReady): return "Apple Intelligence is still getting ready. Try again in a little while."
+        case .unavailable: return "Apple Intelligence isn't available right now."
+        }
+    }
+
+    private static func onDevice(system: String, prompt: String, image: (data: Data, mime: String)?) async throws -> String {
+        if let reason = onDeviceUnavailableReason { throw AIError.server(reason) }
+        if image != nil {
+            throw AIError.server("Apple Intelligence can't look at pictures. Choose another service in Settings → AI to write alt text.")
+        }
+        guard system.count + prompt.count <= onDeviceLimit else {
+            throw AIError.server("That's more than Apple Intelligence can read at once (a few pages). Try a shorter passage, or choose another service in Settings → AI for whole-book reads.")
+        }
+        do {
+            let session = LanguageModelSession(instructions: system)
+            let text = try await session.respond(to: prompt).content
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIError.empty }
+            return text
+        } catch let error as LanguageModelSession.GenerationError {
+            switch error {
+            case .exceededContextWindowSize:
+                throw AIError.server("That's more than Apple Intelligence can read at once. Try a shorter passage.")
+            case .guardrailViolation, .refusal:
+                throw AIError.declined
+            default:
+                throw AIError.server("Apple Intelligence couldn't finish: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Whole-book requests can take minutes.
@@ -87,6 +136,9 @@ struct AIClient {
         let key = key ?? ""
         var request: URLRequest
         switch provider {
+        case .apple:
+            // Never sent anywhere: on-device requests don't go through here.
+            throw AIError.server("Apple Intelligence runs on this Mac.")
         case .anthropic:
             request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
             request.setValue(key, forHTTPHeaderField: "x-api-key")
@@ -135,6 +187,8 @@ struct AIClient {
 
     private func parse(_ json: [String: Any]) throws -> String {
         switch provider {
+        case .apple:
+            return ""
         case .anthropic:
             if json["stop_reason"] as? String == "refusal" { throw AIError.declined }
             let blocks = json["content"] as? [[String: Any]] ?? []
@@ -199,16 +253,27 @@ enum AIEditor {
     }
 
     /// The passage with each suggestion as a margin note right after the words it's about.
+    /// Edits are matched against the passage as written, never against notes already added, and
+    /// each place gets at most one note, so a model that repeats itself can't stack or nest notes.
     static func annotate(_ passage: String, with edits: [LineEdit]) -> (text: String, placed: Int) {
-        var result = passage
-        var placed = 0
-        for edit in edits where !edit.original.isEmpty {
-            guard let range = result.range(of: edit.original) else { continue }
-            let note = " {>>✎ \(edit.suggestion.replacingOccurrences(of: "<<}", with: "")) (\(edit.reason))<<}"
-            result.insert(contentsOf: note, at: range.upperBound)
-            placed += 1
+        func clean(_ s: String) -> String {
+            s.replacingOccurrences(of: "<<}", with: "").replacingOccurrences(of: "{>>", with: "")
+                .replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
         }
-        return (result, placed)
+        var notes: [(at: String.Index, note: String)] = []
+        var taken: [Range<String.Index>] = []
+        for edit in edits {
+            let original = edit.original, suggestion = clean(edit.suggestion)
+            guard !original.isEmpty, !suggestion.isEmpty, suggestion != original,
+                  let range = passage.range(of: original), !taken.contains(where: { $0.overlaps(range) }) else { continue }
+            taken.append(range)
+            let reason = clean(edit.reason)
+            notes.append((range.upperBound, " {>>✎ \(suggestion)\(reason.isEmpty ? "" : " (\(reason))")<<}"))
+        }
+        var result = passage
+        // From the end, so earlier positions stay valid.
+        for item in notes.sorted(by: { $0.at > $1.at }) { result.insert(contentsOf: item.note, at: item.at) }
+        return (result, notes.count)
     }
 
     static func critiquePrompt(title: String, text: String) -> (system: String, prompt: String) {

@@ -157,7 +157,9 @@ final class Preferences {
         showWelcome = defaults.bool(forKey: "showWelcome")
         publishAccounts = (defaults.data(forKey: "publishAccounts")).flatMap { try? JSONDecoder().decode([PublishAccount].self, from: $0) } ?? []
         aiEnabled = defaults.bool(forKey: "aiEnabled")
-        aiProvider = AIProvider(rawValue: defaults.string(forKey: "aiProvider") ?? "") ?? .anthropic
+        // Apple Intelligence needs no key, so it's the starting point where it's available.
+        aiProvider = AIProvider(rawValue: defaults.string(forKey: "aiProvider") ?? "")
+            ?? (AIClient.onDeviceUnavailableReason == nil ? .apple : .anthropic)
         aiModels = defaults.dictionary(forKey: "aiModels") as? [String: String] ?? [:]
         aiConfirmRequests = defaults.bool(forKey: "aiConfirmRequests")
         pomodoroEnabled = defaults.bool(forKey: "pomodoroEnabled")

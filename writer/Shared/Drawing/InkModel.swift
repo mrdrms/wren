@@ -115,6 +115,11 @@ nonisolated enum InkLayer: String, Codable, CaseIterable, Identifiable {
     }
 
     var prints: Bool { self != .pencil }
+
+    /// A layer from a newer version reads as inks, so the drawing still opens.
+    init(from decoder: Decoder) throws {
+        self = InkLayer(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .ink
+    }
 }
 
 nonisolated struct InkStroke: Codable, Equatable, Identifiable {
